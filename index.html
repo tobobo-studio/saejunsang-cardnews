@@ -177,6 +177,8 @@ details.sec>.stack{margin:4px 0 12px}
 .tweakhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .tweakhead h2{margin:0}
 .namehead{padding-bottom:4px}
+.sync::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--t4);vertical-align:1px}
+.sync.ok::before{background:var(--green-t)} .sync.saving::before{background:var(--orange-t)} .sync.error{color:var(--red-t)} .sync.error::before{background:var(--red)}
 .noBadge{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:8px;background:var(--primary-weak);color:var(--primary-weak-t);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
 .nameInput{font-size:22px!important;line-height:31px;font-weight:700;padding:10px 14px!important}
 #genNote{margin-top:-4px}
@@ -243,7 +245,8 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
           <button class="btn sm" id="restore" type="button">백업 파일 열기</button>
         </div>
         <input type="file" id="restoreFile" accept=".json,application/json" hidden>
-        <p class="hint">작업 내용은 이 브라우저에 자동 저장돼요. 다른 컴퓨터로 옮길 땐 백업 파일을 쓰세요.</p>
+        <p class="hint sync" id="syncState">불러오는 중…</p>
+        <button class="btn weak block" id="importLocal" type="button" hidden></button>
       </div>
     </aside>
 
@@ -395,8 +398,140 @@ const DB = {
   async get(k){ try{ const db=await this.open(); return await new Promise((res,rej)=>{const q=db.transaction("kv").objectStore("kv").get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);}); }catch(e){ return undefined; } },
   async set(k,v){ try{ const db=await this.open(); await new Promise((res,rej)=>{const t=db.transaction("kv","readwrite");t.objectStore("kv").put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error);}); }catch(e){} },
 };
-let saveTimer=null;
-function persist(){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>DB.set("state",{brands,current}),400); }
+/* ---------- shared storage (Supabase): one brand list for everyone with the link ----------
+   The publishable key is meant to live in browser code; what it may do is set by the table policies.
+   Where Supabase can't be reached (e.g. inside the Claude viewer), the app falls back to IndexedDB. */
+const SB_URL="https://owbaibkldgtixaskuvhd.supabase.co";
+const SB_KEY="sb_publishable_dBC439I0iaObf88_Kk2kNA_CQsgjKpC";
+let shared=false;
+async function sb(path,opt={}){
+  const r=await fetch(SB_URL+path,Object.assign({},opt,{headers:Object.assign({apikey:SB_KEY,"content-type":"application/json"},opt.headers||{})}));
+  if(!r.ok) throw new Error(r.status+" "+await r.text());
+  const t=await r.text(); return t?JSON.parse(t):null;
+}
+const dataOf=b=>{ const d={}; for(const k in b) if(k!=="id"&&k!=="sample"&&k[0]!=="_") d[k]=b[k]; return d; };
+function fromRow(r){
+  const b=migrate(newBrand(Object.assign({},r.data,{id:r.id})));
+  Object.assign(b,{_remote:true,_ord:r.ord,_saved:JSON.stringify(r.data),_at:r.updated_at}); return b;
+}
+const fetchRows=()=>sb("/rest/v1/brands?select=id,seq,ord,data,updated_at&order=ord.asc.nullslast,seq.asc");
+async function insertRow(b){
+  const [r]=await sb("/rest/v1/brands",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({ord:b._ord??Date.now(),data:dataOf(b)})});
+  Object.assign(b,{id:r.id,_remote:true,_ord:r.ord,_saved:JSON.stringify(r.data),_at:r.updated_at});
+}
+
+const dirty=new Set(); let saveTimer=null, flushing=null;
+function persist(){
+  clearTimeout(saveTimer);
+  if(!shared){ saveTimer=setTimeout(()=>DB.set("state",{brands,current}),400); return; }
+  const b=cur(); if(b&&!b.sample) dirty.add(b);
+  saveTimer=setTimeout(flush,700);
+}
+async function flush(){
+  while(flushing) await flushing;
+  if(!dirty.size) return;
+  flushing=(async()=>{
+    setSync("saving");
+    for(const b of [...dirty]){
+      dirty.delete(b);
+      try{
+        if(!b._remote){ await insertRow(b); renderList(); continue; }
+        const d=dataOf(b), js=JSON.stringify(d); if(js===b._saved) continue;
+        const [r]=await sb(`/rest/v1/brands?id=eq.${b.id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({data:d,updated_at:new Date().toISOString()})});
+        if(r){ b._saved=js; b._at=r.updated_at; }
+      }catch(e){ console.error(e); dirty.add(b); setSync("error"); return; }
+    }
+    setSync("ok");
+  })();
+  try{ await flushing; } finally{ flushing=null; }
+}
+async function saveOrder(){
+  if(!shared) return persist();
+  const jobs=[]; brands.forEach((b,k)=>{ if(b._remote&&b._ord!==k){ b._ord=k; jobs.push(sb(`/rest/v1/brands?id=eq.${b.id}`,{method:"PATCH",body:JSON.stringify({ord:k})})); } });
+  try{ await Promise.all(jobs); }catch(e){ setSync("error"); }
+}
+async function removeRemote(b){
+  dirty.delete(b);
+  if(!shared||!b._remote) return;
+  try{
+    await sb(`/rest/v1/brands?id=eq.${b.id}`,{method:"DELETE"});
+    const paths=b.photos.map(p=>p.path).filter(Boolean);
+    if(paths.length) await sb("/storage/v1/object/photos",{method:"DELETE",body:JSON.stringify({prefixes:paths})});
+  }catch(e){ setSync("error"); }
+}
+async function storePhoto(b,slot,blob){
+  if(!shared) return {src:await new Promise(res=>{const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(blob);})};
+  if(!b._remote){ b.sample=false; delete b.sample; dirty.add(b); await flush(); if(!b._remote) throw new Error("brand not saved"); }
+  const path=`${b.id}/${slot}-${Date.now()}.jpg`;
+  const r=await fetch(`${SB_URL}/storage/v1/object/photos/${path}`,{method:"POST",headers:{apikey:SB_KEY,"content-type":"image/jpeg"},body:blob});
+  if(!r.ok) throw new Error(await r.text());
+  return {src:`${SB_URL}/storage/v1/object/public/photos/${path}`,path};
+}
+function dropPhoto(p){
+  if(shared&&p&&p.path) sb("/storage/v1/object/photos",{method:"DELETE",body:JSON.stringify({prefixes:[p.path]})}).catch(()=>{});
+}
+/* Pick up other people's changes every few seconds (and when the tab regains focus). */
+async function pull(){
+  if(!shared||document.hidden||flushing) return;
+  let rows; try{ rows=await fetchRows(); }catch(e){ setSync("error"); return; }
+  const mine=new Map(brands.filter(b=>b._remote).map(b=>[b.id,b]));
+  const curB=cur(); let curChanged=false, listChanged=false; const next=[];
+  for(const r of rows){
+    let b=mine.get(r.id);
+    if(!b){ next.push(fromRow(r)); listChanged=true; continue; }
+    mine.delete(r.id);
+    const js=JSON.stringify(r.data);
+    if(js!==b._saved && !dirty.has(b) && r.updated_at!==b._at){
+      const fresh=fromRow(r); for(const k of Object.keys(b)) delete b[k]; Object.assign(b,fresh);
+      listChanged=true; if(b===curB) curChanged=true;
+    }
+    if(b._ord!==r.ord){ b._ord=r.ord; listChanged=true; }
+    next.push(b);
+  }
+  if(mine.size) listChanged=true; // removed by someone else
+  if(!listChanged){ setSync("ok"); return; }
+  brands=next.concat(brands.filter(b=>!b._remote));
+  if(!brands.length) brands=[SAMPLE()];
+  const idx=brands.indexOf(curB);
+  if(idx<0){ current=Math.min(current,brands.length-1); curChanged=true; } else current=idx;
+  if(curChanged){ render(pageSet,cur(),current+1); fillEditor(); showChecks(); }
+  else { pageSet.no.textContent="No."+pad(current+1); $("#edNo").textContent=`No.${pad(current+1)}`; }
+  renderList(); setSync("ok");
+}
+function setSync(state){
+  const n=$("#syncState"); if(!n) return;
+  n.className="hint sync "+state;
+  n.textContent=!shared?"이 브라우저에만 저장돼요. 공유 저장소에 연결되지 않은 화면이에요."
+    :state==="saving"?"저장하는 중…"
+    :state==="error"?"저장이 잠시 멈췄어요. 인터넷 연결을 확인하면 다시 저장돼요."
+    :"링크를 가진 모든 사람과 함께 쓰는 목록이에요. 바뀐 내용은 자동으로 저장돼요.";
+}
+/* Bring brands from this browser's old local storage or a backup file into the shared list. */
+async function importBrands(list){
+  for(const src of list){
+    const b=migrate(newBrand(Object.assign({},src))); delete b.sample; b.id=uid(); b._ord=Date.now();
+    const photos=b.photos; b.photos=[blankPhoto(),blankPhoto(),blankPhoto()];
+    brands.push(b); await insertRow(b);
+    for(let i=0;i<3;i++){
+      const p=photos[i]; if(!p||!p.src) continue;
+      if(p.src.startsWith("data:")){ const blob=await (await fetch(p.src)).blob(); const st=await storePhoto(b,i,blob); b.photos[i]=Object.assign({},p,st); }
+      else b.photos[i]=p;
+    }
+    dirty.add(b);
+  }
+  await flush();
+}
+async function offerLocalImport(){
+  const saved=await DB.get("state");
+  const list=(saved&&Array.isArray(saved.brands)?saved.brands:[]).filter(b=>!b.sample&&(b.name||b.intro||b.newyear));
+  if(!list.length) return;
+  const btn=$("#importLocal"); btn.hidden=false; btn.textContent=`이 브라우저에만 있던 브랜드 ${list.length}개 공유 목록에 올리기`;
+  btn.onclick=async()=>{
+    btn.disabled=true; btn.textContent="올리는 중…";
+    try{ await importBrands(list); await DB.set("state",null); btn.hidden=true; renderList(); toast(`브랜드 ${list.length}개를 공유 목록에 올렸어요.`); }
+    catch(e){ console.error(e); btn.disabled=false; btn.textContent="다시 올리기"; toast("올리는 중 문제가 생겼어요. 다시 눌러 주세요."); }
+  };
+}
 
 /* ---------- card DOM ---------- */
 function el(tag, cls, parent, style){
@@ -738,7 +873,7 @@ function initEditor(){
     s.querySelector(`#rt-${i}`).addEventListener("input",e=>{cur().photos[i].rot=+e.target.value; changed(false);});
     s.querySelector(".r90").addEventListener("click",()=>{const p=cur().photos[i]; let r=p.rot+90; if(r>180) r-=360; p.rot=r; changed();});
     s.querySelector(".reset").addEventListener("click",()=>{Object.assign(cur().photos[i],{scale:1,x:0,y:0,rot:0}); changed();});
-    s.querySelector(".rm").addEventListener("click",()=>{cur().photos[i]=blankPhoto(); changed();});
+    s.querySelector(".rm").addEventListener("click",()=>{dropPhoto(cur().photos[i]); cur().photos[i]=blankPhoto(); changed();});
   });
   $("#photoFile").addEventListener("change",async e=>{
     const f=e.target.files[0]; e.target.value=""; if(f) await loadPhoto(f,pendingSlot);
@@ -831,8 +966,9 @@ function renderList(){
     const del=li.querySelector(".del");
     del.addEventListener("click",()=>{
       if(!del.classList.contains("del-confirm")){ del.classList.add("del-confirm"); del.textContent="삭제"; setTimeout(()=>{del.classList.remove("del-confirm");del.textContent="✕";},2500); return; }
-      brands.splice(i,1); if(!brands.length) brands.push(newBrand());
-      current=Math.min(current,brands.length-1); select(current);
+      const gone=brands.splice(i,1)[0]; removeRemote(gone);
+      if(!brands.length) brands.push(shared?SAMPLE():newBrand());
+      current=Math.min(current,brands.length-1); select(current); saveOrder();
     });
   });
 }
@@ -844,7 +980,7 @@ function move(i,d){
   const j=i+d; if(j<0||j>=brands.length) return;
   [brands[i],brands[j]]=[brands[j],brands[i]];
   if(current===i) current=j; else if(current===j) current=i;
-  select(current);
+  select(current); saveOrder();
 }
 function select(i){ current=i; render(pageSet,cur(),current+1); fillEditor(); renderList(); showChecks(); persist(); }
 
@@ -858,9 +994,17 @@ async function loadPhoto(file, slot, target){
     const w=Math.round(img.naturalWidth*k), h=Math.round(img.naturalHeight*k);
     const c=document.createElement("canvas"); c.width=w; c.height=h;
     c.getContext("2d").drawImage(img,0,0,w,h);
-    const src=c.toDataURL("image/jpeg",0.9);
-    const b=target||cur(); b.photos[slot]={src,w,h,scale:1,x:0,y:0,rot:0};
-    changed();
+    const blob=await new Promise(res=>c.toBlob(res,"image/jpeg",0.9));
+    const b=target||cur();
+    if(shared) toast("사진을 올리는 중이에요…");
+    let st;
+    try{ st=await storePhoto(b,slot,blob); }
+    catch(e){ console.error(e); toast("사진을 올리는 중 문제가 생겼어요. 인터넷 연결을 확인하고 다시 올려 주세요."); return; }
+    const old=b.photos[slot];
+    b.photos[slot]=Object.assign({w,h,scale:1,x:0,y:0,rot:0},st);
+    dropPhoto(old);
+    if(b===cur()) changed(); else { dirty.add(b); flush(); }
+    if(shared) toast("사진을 올렸어요.");
   }catch(e){ toast("이 파일은 열 수 없어요. JPG나 PNG 사진으로 다시 올려 주세요."); }
   finally{ URL.revokeObjectURL(url); }
 }
@@ -1013,20 +1157,39 @@ $("#backup").addEventListener("click",()=>saveFile("새준상_카드뉴스_백�
 $("#restore").addEventListener("click",()=>$("#restoreFile").click());
 $("#restoreFile").addEventListener("change",async e=>{
   const f=e.target.files[0]; e.target.value=""; if(!f) return;
-  try{ const d=JSON.parse(await f.text()); if(!Array.isArray(d.brands)||!d.brands.length) throw 0;
-    brands=d.brands.map(b=>migrate(newBrand(b))); current=0; select(0); toast(`브랜드 ${brands.length}개를 불러왔어요.`);
-  }catch(_){ toast("백업 파일 형식이 아니에요."); }
+  let d; try{ d=JSON.parse(await f.text()); if(!Array.isArray(d.brands)||!d.brands.length) throw 0; }
+  catch(_){ toast("백업 파일 형식이 아니에요."); return; }
+  if(!shared){ brands=d.brands.map(b=>migrate(newBrand(b))); current=0; select(0); toast(`브랜드 ${brands.length}개를 불러왔어요.`); return; }
+  toast("백업에 있던 브랜드를 공유 목록에 추가하는 중이에요…");
+  try{ brands=brands.filter(b=>!b.sample); await importBrands(d.brands); current=Math.max(0,brands.length-1); select(current); toast(`브랜드 ${d.brands.length}개를 공유 목록에 추가했어요.`); }
+  catch(e){ console.error(e); toast("추가하는 중 문제가 생겼어요. 다시 시도해 주세요."); }
 });
-$("#addBrand").addEventListener("click",()=>{ brands.push(newBrand()); select(brands.length-1); $("#f-name").focus(); });
+$("#addBrand").addEventListener("click",()=>{
+  const b=newBrand(); b._ord=Date.now();
+  if(shared){ brands=brands.filter(x=>!x.sample); dirty.add(b); }
+  brands.push(b); select(brands.length-1); $("#f-name").focus();
+  if(shared) flush();
+});
 let toastTimer;
 function toast(t){ let n=$(".toast"); if(!n){ n=el("div","toast",document.body); n.setAttribute("role","status"); } n.textContent=t; n.hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>n.hidden=true,3200); }
 
 /* ---------- boot ---------- */
 (async function boot(){
   initEditor(); initPreview(); sampler(); downloads();
-  const saved=await DB.get("state");
-  if(saved&&Array.isArray(saved.brands)&&saved.brands.length){ brands=saved.brands.map(b=>migrate(newBrand(b))); current=Math.min(saved.current||0,brands.length-1); }
-  else { try{ await document.fonts.load('700 44px "Pretendard"'); }catch(_){} brands=[SAMPLE()]; }
+  try{ await document.fonts.load('700 44px "Pretendard"'); }catch(_){}
+  let rows=null;
+  try{ rows=await fetchRows(); shared=true; }catch(e){ shared=false; }
+  if(shared){
+    brands=rows.map(fromRow); if(!brands.length) brands=[SAMPLE()];
+    current=0; offerLocalImport();
+    setInterval(pull,6000); window.addEventListener("focus",pull);
+    window.addEventListener("beforeunload",e=>{ if(dirty.size||flushing){ flush(); e.preventDefault(); e.returnValue=""; } });
+  } else {
+    const saved=await DB.get("state");
+    if(saved&&Array.isArray(saved.brands)&&saved.brands.length){ brands=saved.brands.map(b=>migrate(newBrand(b))); current=Math.min(saved.current||0,brands.length-1); }
+    else brands=[SAMPLE()];
+  }
+  setSync("ok");
   select(current);
   document.fonts.ready.then(()=>{ render(pageSet,cur(),current+1); showChecks(); });
 })();
