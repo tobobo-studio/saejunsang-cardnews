@@ -201,7 +201,7 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
 .cn-ic{position:absolute}
 .cn-ic>div{position:absolute}
 .cn-ic img{position:absolute;inset:0;width:100%;height:100%;display:block;max-width:none}
-.cn-photo{position:absolute;overflow:hidden;background:#ece0d2;cursor:grab;touch-action:none}
+.cn-photo{position:absolute;overflow:hidden;background:#ece0d2;cursor:grab;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none}
 .cn-photo.drag{cursor:grabbing}
 .cn-photo img.ph{position:absolute;left:50%;top:50%;max-width:none;pointer-events:none;transform-origin:50% 50%}
 .cn-photo .empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#8a7d72;font-size:40px;font-weight:700;text-align:center;border:6px dashed #c9b8a6;cursor:pointer}
@@ -266,7 +266,7 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
       <div class="field">
         <span class="lbl"><span><span class="stepn">2</span>사진 3장</span></span>
         <div class="thumbs" id="thumbs"></div>
-        <p class="hint">미리보기에서 사진을 끌면 위치, 휠을 굴리면 크기가 바뀌어요.</p>
+        <p class="hint">미리보기에서 사진을 끌어 옮기고, 휠이나 두 손가락(벌리기·돌리기)으로 크기와 각도를 바꿀 수 있어요.</p>
       </div>
 
       <div class="field" data-f="hook">
@@ -554,7 +554,7 @@ function photoFrame(parent, f, slot){
   fr.dataset.slot=slot;
   const img=el("img","ph",fr); img.alt=""; img.hidden=true;
   const empty=el("div","empty no-export",fr);
-  empty.innerHTML=`<span>${SLOT_NAMES[slot]}</span><small>클릭하거나 사진을 끌어다 놓으세요</small>`;
+  empty.innerHTML=`<span>${SLOT_NAMES[slot]}</span><small>눌러서 올리거나 사진을 끌어다 놓으세요</small>`;
   return {fr,img,empty,f};
 }
 
@@ -714,26 +714,139 @@ const HEAD_W=600;
 const measureCtx=document.createElement("canvas").getContext("2d");
 function headWidth(s){ measureCtx.font='700 44px "Pretendard"'; return measureCtx.measureText(s).width-1.76*len(s); }
 const fits = s => headWidth(s)<=HEAD_W;
-/* Rule-based split (used when Claude isn't available). Only whole sentences are moved:
-   the headline is 1–2 complete sentences, the description is the other sentences in order. */
+const HEAD_MAX=HEAD_W+80; // the layout check's hard limit
+/* ---------- rule-based editing (used where Claude isn't available, e.g. the GitHub link) ----------
+   Not a plain "first sentences on top, the rest below" split:
+   1) the sentence that carries the main message is picked for the 2-line headline
+      (brand introduction: what the brand is / does; new-year note: the wish or cheer — often the last line),
+   2) it is tidied for a headline (leading "그리고/그래서…", the brand name as subject, brackets, emoji removed),
+   3) the description is made from the other sentences, trimmed to fit 3 lines on the card. */
+const BODY_W=642;
+function bodyLines(s, fs=28){ // greedy word wrap, the way the card breaks lines (keep-all)
+  measureCtx.font=`500 ${fs}px "Pretendard"`;
+  const w=t=>measureCtx.measureText(t).width-fs*0.04*len(t);
+  let n=0, line="";
+  for(const word of s.split(" ")){ const nx=line?line+" "+word:word; if(line && w(nx)>BODY_W){ n++; line=word; } else line=nx; }
+  return n+(line?1:0);
+}
+const SENT_END=/(니다|[가-힣]요|이다|[한된는간온운준인]다|있다|없다|[았었였했겠]다|죠|자)$/;
+const NOT_END=/(필요|중요|주요|수요|소요|요요)$/;
 function sentencesOf(answer){
   const t=answer.replace(/\s+/g," ").trim(); if(!t) return [];
-  return (t.match(/[^.!?。…~]+(?:[.!?。…~]+["'”’)]*|$)/g)||[t]).map(s=>s.trim()).filter(Boolean);
+  const parts=(t.match(/[^.!?。…~]+(?:[.!?。…~]+["'”’)]*|$)/g)||[t]).map(s=>s.trim()).filter(Boolean);
+  // "고민이 많다면... 찾아와": an ellipsis after a connecting ending doesn't end the sentence
+  const out=[];
+  for(const s of parts){
+    const prev=out[out.length-1];
+    if(prev && /(면|데|고|서|지만|니까|며|라도|어도|아도)\s*(\.{2,}|…+)$/.test(prev)) out[out.length-1]=prev+" "+s;
+    else out.push(s);
+  }
+  // text typed without full stops: split after sentence endings such as "…해요 " / "…입니다 "
+  return out.flatMap(s=>{
+    if(len(s)<=40 || /[.!?。…~]/.test(s.slice(0,-1))) return [s];
+    const res=[]; let buf=[];
+    for(const wd of s.split(" ")){ buf.push(wd); if(SENT_END.test(wd) && !NOT_END.test(wd)){ res.push(buf.join(" ")); buf=[]; } }
+    if(buf.length) res.push(buf.join(" "));
+    return res.length>1 && res.every(x=>len(x)>=6) ? res.map(x=>/[.!?~…]$/.test(x)?x:x+".") : [s];
+  });
 }
-function splitAnswer(answer){
+const MOD_END=/^(첫|새|온|모든|각|매|이런|그런|저런|어떤|이|그|저|한|두|세|네|몇)$|([가-힣](한|운|던|된|진|갈|할|될|쁜|른|큰|인)|(작|많|좋|높|깊|넓|같|밝|맑)은|(하|내|쓰|있|없|가|오|주|되|보|드|지|우|치|타|만드)는)$/;
+const PART_END=/(을|를|이|가|은|는|에|에서|로|으로|와|과|도|고|며|서|게|면|만|처럼|부터|까지|께)$/;
+const CONJ=/^(그리고|그래서|그러니까|그러니|그러므로|또한|또|하지만|그런데|그렇지만|따라서|특히|이제는|이제|무엇보다|더불어|아울러|게다가|그래도|결국|사실|물론)\s*,?\s+/;
+const escRe=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+function nameForms(name){
+  const n=(name||"").trim(); if(!n) return [];
+  const f=new Set([n, n.replace(/\s+/g,"")]); const first=n.split(/\s+/)[0]; if(len(first)>=2 && first!==n) f.add(first);
+  return [...f].sort((a,b)=>b.length-a.length);
+}
+function tidyHead(s, name){
+  let t=s.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu,"").replace(/\s*\([^)]*\)/g,"").replace(/\s+/g," ").trim();
+  t=t.replace(CONJ,"");
+  const forms=nameForms(name).map(escRe);
+  if(forms.length){
+    // the brand name is already on the cover: drop it where it is the subject ("히히웍스는 …", "새해를 히히웍스가 응원할게요")
+    const subj=`(?:저희\\s*)?(?:${forms.join("|")})\\s*(?:은|는|이|가|에서는)`;
+    t=t.replace(new RegExp(`^${subj}\\s+`),"").replace(new RegExp(`\\s${subj}\\s`),"  ").replace(/\s+/g," ");
+  }
+  t=t.replace(/^저희는\s+/,"").replace(/[,，]\s*$/,"").trim();
+  return t;
+}
+const FILLER=/(^|\s)(정말|너무나|진심으로|항상|늘|더욱|매우|아주|한층)\s+/g;
+const KEY={
+  intro:/(입니다|이에요|예요|브랜드|스튜디오|공간|상점|가게|만들|만듭|전하|전합|담아|담은|선보|돕|위한|위해|풀어)/,
+  newyear:/(새해|올해|한 해|내년|시작|응원|함께|당신|여러분|바라|기원|행복|건강|복|찾아와|만나요|기다릴|채워)/,
+};
+function sentScore(s,i,n,kind){
+  let sc=0;
+  if(KEY[kind].test(s)) sc+=2;
+  if(kind==="intro" && i===0) sc+=1.5;
+  if(kind==="newyear"){ if(i===n-1) sc+=1; if(i===0) sc+=0.5; }
+  if(/[!~]["'”’)]*$/.test(s)) sc+=0.3;
+  if(CONJ.test(s)) sc-=1;                                                 // leans on what came before
+  if(/(니까요?|거든요?|때문이에요|때문이죠|때문입니다)[.!~]*$/.test(s)) sc-=1.5; // a reason, not the message
+  if(/(면|데|고|서|지만|며)\s*(\.{2,}|…+)?$/.test(s)) sc-=2;                   // unfinished
+  return sc;
+}
+const badBreak=two=>!!two && MOD_END.test(two[0].split(" ").pop());
+// Longest ending of a sentence that still fits two lines, starting at a natural phrase break.
+function tailPhrase(t){
+  const words=t.split(" ");
+  for(let k=1;k<words.length;k++){
+    const prev=words[k-1];
+    if(!/([,，]|[로와과를을고며서의에])$/.test(prev)) continue;
+    const tail=words.slice(k).join(" "); if(len(tail)<8) continue;
+    if(fits(tail)) return tail;
+    const two=balance(tail); if(two && !badBreak(two)) return tail;
+  }
+  return null;
+}
+function headOptions(ss, kind, name){
+  const n=ss.length, opts=[], prep=ss.map(s=>tidyHead(s,name));
+  const sc=ss.map((s,i)=>sentScore(s,i,n,kind));
+  prep.forEach((h,i)=>{
+    if(len(h)<4) return;
+    const tries=[h, h.replace(FILLER,"$1").trim()];
+    for(const v of tries){
+      if(fits(v)){
+        const two=headWidth(v)>380 && balance(v);
+        opts.push(two?{l1:two[0],l2:two[1],use:[i],score:sc[i]}:{l1:v,l2:"",use:[i],score:sc[i]-(len(v)<8?1:0.3)});
+        return;
+      }
+      const two=balance(v); if(two){ opts.push({l1:two[0],l2:two[1],use:[i],score:sc[i]-(badBreak(two)?1:0)}); return; }
+    }
+    const tail=tailPhrase(tries[1]); // too long for two lines: use its ending (the part that says what it is)
+    if(tail){ const two=fits(tail)&&headWidth(tail)<=380?null:balance(tail); opts.push({l1:two?two[0]:tail,l2:two?two[1]:"",use:[i],partial:true,score:sc[i]-0.5}); }
+  });
+  // two short sentences, one per line (reading order kept)
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){
+    if(len(prep[i])<4||len(prep[j])<4||!fits(prep[i])||!fits(prep[j])) continue;
+    opts.push({l1:prep[i],l2:prep[j],use:[i,j],score:(sc[i]+sc[j])/2+0.4-(j-i>1?0.2:0)});
+  }
+  return opts.sort((a,b)=>b.score-a.score);
+}
+// Description: the sentences not used on top, in their original order, trimmed to ≤3 card lines.
+function buildBody(ss, opt, kind){
+  const n=ss.length, sc=ss.map((s,i)=>sentScore(s,i,n,kind));
+  let keep=ss.map((s,i)=>i).filter(i=>opt.partial || !opt.use.includes(i));
+  const text=ids=>ids.map((i,k)=>k===0?ss[i].replace(CONJ,""):ss[i]).join(" ").trim();
+  const ok=ids=>bodyLines(text(ids))<=3 && len(text(ids))<=LIMITS.p2body;
+  while(keep.length>1 && !ok(keep)){ // drop the sentence that adds least
+    let worst=0; keep.forEach((i,k)=>{ if(sc[i]<sc[keep[worst]]) worst=k; });
+    keep.splice(worst,1);
+  }
+  let body=text(keep);
+  if(keep.length===1 && !ok(keep)) body=body.replace(FILLER,"$1").replace(/\s+/g," ").trim();
+  return body;
+}
+function editAnswer(answer, kind, name){
   const ss=sentencesOf(answer);
   if(!ss.length) return {l1:"",l2:"",body:"",cut:false};
-  const without=(...idx)=>ss.filter((_,i)=>!idx.includes(i)).join(" ");
-  // earliest usable sentence wins: two short sentences (one per line), one sentence over two lines, or one short line
-  for(let i=0;i<ss.length;i++){
-    if(fits(ss[i]) && ss[i+1] && fits(ss[i+1])) return {l1:ss[i], l2:ss[i+1], body:without(i,i+1), cut:false};
-    if(!fits(ss[i])){ const two=balance(ss[i]); if(two) return {l1:two[0], l2:two[1], body:without(i), cut:false}; }
-    else return {l1:ss[i], l2:"", body:without(i), cut:false};
-  }
-  // every sentence is too long: fill two lines, flag it for a manual check
-  const words=ss[0].split(" "); const ls=["",""]; let k=0;
+  const best=headOptions(ss,kind,name)[0];
+  if(best) return {l1:best.l1, l2:best.l2, body:buildBody(ss,best,kind), cut:false, partial:!!best.partial};
+  // nothing fits even as a phrase: fill two lines word by word and flag it for a manual check
+  const words=tidyHead(ss[0],name).split(" "); const ls=["",""]; let k=0;
   for(const li of [0,1]) while(k<words.length){ const nx=ls[li]?ls[li]+" "+words[k]:words[k]; if(!fits(nx)) break; ls[li]=nx; k++; }
-  return {l1:ls[0], l2:ls[1], body:[words.slice(k).join(" "),...ss.slice(1)].join(" ").trim(), cut:true};
+  return {l1:ls[0], l2:ls[1], body:ss.join(" "), cut:true};
 }
 
 /* Claude rewrite (claude.ai viewer): a self-contained 2-line headline + a separate description. */
@@ -747,10 +860,12 @@ function aiPrompt(ans){
 
 각 글마다 두 부분을 만든다.
 1) 핵심 문장 (line1, line2): 카드 상단에 큰 글씨로 두 줄.
-   - 각 줄은 띄어쓰기 포함 15~17자. 절대 18자를 넘기지 않는다.
+   - 각 줄은 띄어쓰기 포함 10~16자. 절대 17자를 넘기지 않는다.
    - 두 줄을 이어 읽으면 그 자체로 완결된 문장(또는 짧은 완결 문장 두 개)이어야 한다. line2는 문장이 끝나는 형태로 끝낸다(…요. / …다. / …!).
    - 줄은 의미 단위에서 나눈다. 조사나 단어 중간에서 나누지 않는다.
-   - 브랜드 소개는 이 브랜드가 어떤 곳인지, 새해 인사는 고객에게 전하는 가장 중요한 말을 담는다.
+   - 원문 문장을 앞에서부터 잘라 넣지 말고, 글 전체에서 가장 중요한 메시지를 골라 짧게 다시 쓴다.
+   - 브랜드 소개는 이 브랜드가 어떤 곳인지, 새해 인사는 고객에게 전하는 가장 중요한 말(응원·바람)을 담는다.
+   - 브랜드명은 표지에 이미 있으니 핵심 문장에는 되도록 넣지 않는다.
 2) 설명 글 (body): 핵심 문장 아래에 들어가는 별도의 글.
    - 띄어쓰기 포함 45~65자, 1~2문장.
    - 핵심 문장을 되풀이하지 말고, 원문의 나머지 내용을 자연스럽게 풀어 쓴다. 핵심 문장에서 이어지는 문장처럼 쓰지 말고 혼자 읽어도 완결되게 쓴다.
@@ -765,32 +880,43 @@ ${ans.newyear||"(없음)"}
 
 JSON만 답해: {"intro":{"line1":"","line2":"","body":""},"newyear":{"line1":"","line2":"","body":""}}`;
 }
+/* Claude's answer is used as long as it fits the card: lines a little over the soft width are re-broken
+   (or allowed up to the layout limit) instead of throwing the rewrite away. */
 function cleanAi(part, fallback){
-  const s=v=>String(v||"").replace(/\s+/g," ").trim();
+  const s=v=>String(v||"").replace(/\s+/g," ").replace(/^["'“”‘’「」]+|["'“”‘’「」]+$/g,"").trim();
   let l1=s(part&&part.line1), l2=s(part&&part.line2); const body=s(part&&part.body);
-  if(!l1||!body) return fallback;
-  if(!fits(l1)||(l2&&!fits(l2))){ const two=balance((l1+" "+l2).trim()); if(!two) return fallback; [l1,l2]=two; }
-  if(!/[.!?…~요다]["'”’)]*$/.test(l2||l1)) return fallback; // headline must finish its sentence
+  if(!l1){ l1=l2; l2=""; }
+  if(!l1) return fallback;
+  const okW=t=>headWidth(t)<=HEAD_MAX;
+  if(!fits(l1)||(l2&&!fits(l2))){
+    const two=balance((l1+" "+l2).trim()) || balance((l1+" "+l2).trim(),HEAD_MAX);
+    if(two) [l1,l2]=two; else if(!okW(l1)||(l2&&!okW(l2))) return fallback;
+  }
   return {l1,l2,body,cut:false,ai:true};
 }
-function balance(chunk){
+function balance(chunk, maxW=HEAD_W){
   let best=null;
+  const ok=t=>headWidth(t)<=maxW;
   for(let i=0;i<chunk.length;i++){
     if(chunk[i]!==" ") continue;
     const a=chunk.slice(0,i).trim(), b=chunk.slice(i+1).trim();
-    if(!a||!b||!fits(a)||!fits(b)) continue;
-    const wa=headWidth(a), wb=headWidth(b);
-    // even lines, a slightly longer first line, and breaks after punctuation are preferred
-    const score=Math.abs(wa-wb) + (wa<wb?20:0) - (/[.,!?~]$/.test(a)?300:0);
+    if(!a||!b||!ok(a)||!ok(b)) continue;
+    const wa=headWidth(a), wb=headWidth(b), last=a.split(" ").pop();
+    // even lines, a slightly longer first line, breaks after punctuation or a particle are preferred;
+    // never leave a modifier ("다양한", "채워갈", "첫") at the end of line 1, away from its noun
+    const score=Math.abs(wa-wb) + (wa<wb?20:0) - (/[.,!?~…]$/.test(a)?300:0)
+      + (MOD_END.test(last)?400:PART_END.test(last)?-120:0);
     if(!best||score<best.score) best={a,b,score};
   }
   return best?[best.a,best.b]:null;
 }
-function generateFrom(b, ai){
-  let i=splitAnswer(b.intro||""), n=splitAnswer(b.newyear||"");
+function generateFrom(b, ai, aiTried){
+  let i=editAnswer(b.intro||"","intro",b.name), n=editAnswer(b.newyear||"","newyear",b.name);
   if(ai){ i=b.intro?cleanAi(ai.intro,i):i; n=b.newyear?cleanAi(ai.newyear,n):n; }
   Object.assign(b,{p2l1:i.l1,p2l2:i.l2,p2body:i.body,p3l1:n.l1,p3l2:n.l2,p3body:n.body});
-  b.mode={ai:!!(i.ai||n.ai), cut:[i.cut&&"브랜드 소개", n.cut&&"새해 인사"].filter(Boolean)};
+  b.mode={v:2, ai:!!(i.ai||n.ai), noAi:aiTried===false,
+    cut:[i.cut&&"브랜드 소개", n.cut&&"새해 인사"].filter(Boolean),
+    partial:[!i.ai&&i.partial&&"브랜드 소개", !n.ai&&n.partial&&"새해 인사"].filter(Boolean)};
 }
 /* Older saves kept one pasted answer block; move it into the separate fields once. */
 function migrate(b){
@@ -805,9 +931,14 @@ function showNote(){
   const box=$("#genNote"); const md=cur().mode;
   if(!md){ box.className="msg"; box.textContent=""; return; }
   box.className="msg "+(md.cut.length?"warn":"ok");
-  box.textContent=md.ai?"Claude가 핵심 문장과 설명 글을 나눠 다듬었어요. 원문과 다른 곳이 없는지 확인해 주세요."
-    :md.cut.length?`${md.cut.join(", ")}: 첫 문장이 길어서 핵심 문장이 중간에 끊겼어요. ‘문구 다듬기’에서 고칠 수 있어요.`
-    :"원문 문장을 그대로 나눠 넣었어요.";
+  if(md.v!==2){ box.textContent=md.ai?"Claude가 핵심 문장과 설명 글을 나눠 다듬었어요. 원문과 다른 곳이 없는지 확인해 주세요.":"원문 문장을 그대로 나눠 넣었어요."; return; }
+  const extra=[
+    md.cut.length?`${md.cut.join(", ")}: 문장이 길어서 핵심 문장이 중간에 끊겼어요.`:"",
+    md.partial.length?`${md.partial.join(", ")}: 긴 문장의 끝부분을 핵심 문장으로 뽑았어요.`:"",
+  ].filter(Boolean).join(" ");
+  box.textContent=(md.ai?"Claude가 핵심 문장 2줄과 설명 글을 새로 다듬었어요. 원문과 다른 곳이 없는지 확인해 주세요."
+    :"원문에서 핵심 메시지를 골라 2줄로 정리하고, 나머지 문장으로 설명 글을 만들었어요."+(md.noAi?" 이 화면에선 Claude 연결이 없어 원문 표현을 그대로 써요.":""))
+    +(extra?" "+extra+" ‘문구 다듬기’에서 고칠 수 있어요.":"");
 }
 
 /* ---------- editor ---------- */
@@ -835,17 +966,19 @@ function initEditor(){
   $("#generate").addEventListener("click",async()=>{
     const btn=$("#generate"); const b=cur();
     if(!b.intro.trim()&&!b.newyear.trim()){ toast("4번 브랜드 소개나 5번 새해 인사를 먼저 입력해 주세요."); $("#f-intro").focus(); return; }
-    let ai=null; const sample=await sampler();
+    if(btn.disabled) return;
+    let ai=null, aiFail=""; const sample=await sampler();
     if(sample){
       btn.disabled=true; btn.textContent="Claude가 문구를 다듬는 중…";
       try{ ai=await sample.json(aiPrompt({name:b.name,intro:b.intro,newyear:b.newyear}),{cache:false}); }
-      catch(e){ if(e&&e.code!=="cancelled") toast(e.code==="not_granted"||e.code==="sampling_disabled"?"Claude를 쓸 수 없어서 원문 문장 그대로 나눴어요.":"Claude 다듬기에 실패해서 원문 문장 그대로 나눴어요."); }
+      catch(e){ if(e&&e.code!=="cancelled") aiFail=e.code==="not_granted"||e.code==="sampling_disabled"?"Claude를 쓸 수 없어서":"Claude 다듬기에 실패해서"; }
       finally{ btn.disabled=false; btn.textContent="카드뉴스 만들기"; }
     }
     if(b!==cur()) return; // switched brand while waiting
-    generateFrom(b, ai); changed();
+    generateFrom(b, ai, !!sample); changed();
     const empty=[!b.name&&"브랜드명", !b.hook&&"한 줄 소개", !b.intro&&"브랜드 소개", !b.newyear&&"새해 인사"].filter(Boolean);
-    toast(empty.length?`${empty.join(", ")}을(를) 입력하면 카드가 완성돼요.`:"카드뉴스를 만들었어요.");
+    toast(aiFail?`${aiFail} 원문에서 핵심 문장을 골라 정리했어요.`
+      :empty.length?`${empty.join(", ")}을(를) 입력하면 카드가 완성돼요.`:"카드뉴스를 만들었어요.");
   });
   // compact photo upload tiles
   const thumbs=$("#thumbs");
@@ -898,7 +1031,7 @@ function fillEditor(){
     th.style.backgroundImage=p.src?`url("${p.src}")`:""; th.innerHTML=p.src?"":"사진<br>올리기";
     const sc=s.querySelector(`#sc-${i}`), rt=s.querySelector(`#rt-${i}`);
     sc.value=Math.round(p.scale*100); sc.nextElementSibling.textContent=Math.round(p.scale*100)+"%";
-    rt.value=p.rot; rt.nextElementSibling.textContent=p.rot+"°";
+    rt.value=Math.round(p.rot); rt.nextElementSibling.textContent=Math.round(p.rot)+"°";
     s.querySelectorAll("input,.r90,.reset,.rm").forEach(x=>x.disabled=!p.src);
   });
 }
@@ -1065,21 +1198,64 @@ function initPreview(){
   showPage(0);
 }
 function scaleOf(fr){ return fr.closest(".pvbox").clientWidth/1080; }
+/* Photo gestures: one finger / mouse drags; two fingers pinch to resize and twist to rotate
+   (around the point between the fingers, so the spot under your fingers stays put). */
+const clampNum=(v,a,b)=>Math.max(a,Math.min(b,v));
+const normDeg=d=>{ d=((d+180)%360+360)%360-180; return Math.round(d*10)/10; };
 function wirePhoto({fr},slot){
-  let drag=null;
+  const pts=new Map(); let g=null, moved=false;
+  const f=()=>FRAMES[slot];
+  // pointer position in card px, relative to the frame's centre (the photo's x/y are measured from there)
+  const at=e=>{ const r=fr.getBoundingClientRect(), s=scaleOf(fr)||1;
+    return {x:(e.clientX-r.left)/s-fr.clientLeft-f().w/2, y:(e.clientY-r.top)/s-fr.clientTop-f().h/2}; };
+  const start=()=>{
+    const ph=cur().photos[slot], a=[...pts.values()];
+    if(a.length>=2){ const [p,q]=a;
+      g={two:true, c:{x:(p.x+q.x)/2,y:(p.y+q.y)/2}, d:Math.hypot(q.x-p.x,q.y-p.y)||1, ang:Math.atan2(q.y-p.y,q.x-p.x),
+         x:ph.x, y:ph.y, scale:ph.scale, rot:ph.rot, turning:false, off:0}; }
+    else if(a.length===1) g={two:false, p:a[0], x:ph.x, y:ph.y};
+    else g=null;
+  };
   fr.addEventListener("pointerdown",e=>{
-    const ph=cur().photos[slot];
-    if(!ph.src){ pendingSlot=slot; $("#photoFile").click(); return; }
-    drag={x:e.clientX,y:e.clientY,ox:ph.x,oy:ph.y,s:scaleOf(fr)}; fr.setPointerCapture(e.pointerId); fr.classList.add("drag");
+    if(!cur().photos[slot].src || (e.pointerType==="mouse" && e.button!==0)) return;
+    e.preventDefault();
+    try{ fr.setPointerCapture(e.pointerId); }catch(_){}
+    pts.set(e.pointerId,at(e)); if(pts.size===1) moved=false;
+    fr.classList.add("drag"); start();
   });
   fr.addEventListener("pointermove",e=>{
-    if(!drag) return; const ph=cur().photos[slot]; const f=FRAMES[slot];
-    ph.x=Math.max(-f.w,Math.min(f.w,drag.ox+(e.clientX-drag.x)/drag.s));
-    ph.y=Math.max(-f.h,Math.min(f.h,drag.oy+(e.clientY-drag.y)/drag.s));
-    applyPhoto(pageSet.photos[slot],ph);
+    if(!g || !pts.has(e.pointerId)) return;
+    pts.set(e.pointerId,at(e));
+    const ph=cur().photos[slot], F=f();
+    if(!g.two){ const p=pts.get(e.pointerId); ph.x=g.x+(p.x-g.p.x); ph.y=g.y+(p.y-g.p.y); }
+    else {
+      const [p,q]=[...pts.values()];
+      const c={x:(p.x+q.x)/2,y:(p.y+q.y)/2}, d=Math.hypot(q.x-p.x,q.y-p.y)||1;
+      let th=Math.atan2(q.y-p.y,q.x-p.x)-g.ang; th=Math.atan2(Math.sin(th),Math.cos(th));
+      // a small twist while pinching is ignored; past ~8° the photo turns with your fingers
+      if(!g.turning && Math.abs(th)>0.14){ g.turning=true; g.off=th; }
+      let t=g.turning?th-g.off:0;
+      let rot=g.rot+t*180/Math.PI; const snap=Math.round(rot/90)*90;
+      if(g.turning && Math.abs(rot-snap)<3){ rot=snap; t=(snap-g.rot)*Math.PI/180; } // settle on straight angles
+      const scale=clampNum(g.scale*d/g.d,.5,3), k=scale/g.scale, cos=Math.cos(t), sin=Math.sin(t);
+      const dx=g.x-g.c.x, dy=g.y-g.c.y;
+      ph.x=c.x+(dx*cos-dy*sin)*k; ph.y=c.y+(dx*sin+dy*cos)*k;
+      ph.scale=Math.round(scale*1000)/1000; ph.rot=normDeg(rot);
+    }
+    ph.x=clampNum(ph.x,-F.w,F.w); ph.y=clampNum(ph.y,-F.h,F.h);
+    moved=true; applyPhoto(pageSet.photos[slot],ph);
   });
-  const end=()=>{ if(drag){ drag=null; fr.classList.remove("drag"); persist(); } };
-  fr.addEventListener("pointerup",end); fr.addEventListener("pointercancel",end);
+  const end=e=>{
+    if(!pts.delete(e.pointerId)) return;
+    if(pts.size){ start(); return; } // one finger lifted: carry on dragging with the other
+    g=null; fr.classList.remove("drag");
+    if(moved){ fillEditor(); persist(); }
+  };
+  fr.addEventListener("pointerup",end); fr.addEventListener("pointercancel",end); fr.addEventListener("lostpointercapture",end);
+  // a tap on an empty frame opens the photo picker (on click, so a scroll that starts there doesn't)
+  fr.addEventListener("click",()=>{ if(!cur().photos[slot].src){ pendingSlot=slot; $("#photoFile").click(); } });
+  // Safari's own pinch gesture would zoom the page instead
+  ["gesturestart","gesturechange"].forEach(t=>fr.addEventListener(t,e=>e.preventDefault()));
   fr.addEventListener("wheel",e=>{
     const ph=cur().photos[slot]; if(!ph.src) return; e.preventDefault();
     ph.scale=Math.max(.5,Math.min(3,ph.scale*(1-e.deltaY*0.0015)));
@@ -1107,50 +1283,74 @@ async function saveFile(filename, blob){
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
   toast("저장했어요: "+filename);
 }
+/* Images are always made from a separate, fully visible copy of the cards (kept off-screen).
+   The preview hides the pages you aren't looking at, and that hidden state used to be copied
+   into the image — which is why pages 2 and 3 came out blank. */
+let exportRef=null;
+function exportCards(b, num){
+  if(!exportRef){ exportRef=buildPages(); exportRef.pages.forEach(p=>$("#offstage").appendChild(p)); }
+  render(exportRef,b,num);
+  return exportRef;
+}
+// Safari sometimes draws the photos only on the second pass, so it renders once to warm up.
+const UA=navigator.userAgent;
+const WEBKIT=(/AppleWebKit/.test(UA) && !/Chrome|Chromium|Edg|Android/.test(UA)) || /iPad|iPhone|iPod/.test(UA) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
 async function renderPng(page){
   await document.fonts.ready;
   await Promise.all([...page.querySelectorAll("img")].map(i=>i.src&&!i.hidden?i.decode().catch(()=>{}):null));
-  return htmlToImage.toBlob(page,{width:1080,height:1350,pixelRatio:1,cacheBust:false,fontEmbedCSS:FONT_CSS,
-    style:{transform:"none",left:"0",top:"0"},filter:n=>!(n.classList&&n.classList.contains("no-export"))});
+  const opt={width:1080,height:1350,pixelRatio:1,cacheBust:false,fontEmbedCSS:FONT_CSS,
+    style:{transform:"none",left:"0",top:"0",visibility:"visible"},filter:n=>!(n.classList&&n.classList.contains("no-export")) && !(n.tagName==="IMG" && (n.hidden||!n.getAttribute("src")))};
+  if(WEBKIT) await htmlToImage.toBlob(page,opt).catch(()=>{});
+  const blob=await htmlToImage.toBlob(page,opt);
+  if(!blob) throw new Error("empty image");
+  return blob;
 }
-const fileBase=(b,num)=>`No${pad(num)}_${(b.name||"브랜드").replace(/[\\/:*?"<>|]/g,"")}`;
+const fileBase=(b,num)=>`No${pad(num)}_${(b.name||"브랜드").trim().replace(/[\\/:*?"<>|]/g,"")||"브랜드"}`;
+let busy=false;
 async function saveOne(i){
-  if(showChecks()) return;
-  toast("이미지를 만드는 중…");
-  const blob=await renderPng(pageSet.pages[i]);
-  await saveFile(`${fileBase(cur(),current+1)}_${PAGE_NAMES[i]}.png`,blob);
+  if(showChecks()||busy) return;
+  busy=true; const btns=document.querySelectorAll(".save1"); btns.forEach(x=>x.disabled=true);
+  try{
+    const b=cur(); toast("이미지를 만드는 중…");
+    const r=exportCards(b,current+1);
+    const blob=await renderPng(r.pages[i]);
+    await saveFile(`${fileBase(b,current+1)}_${PAGE_NAMES[i]}.png`,blob);
+  }catch(e){ toast("이미지를 만드는 중 문제가 생겼어요. 다시 눌러 주세요."); console.error(e); }
+  finally{ busy=false; showChecks(); }
 }
-async function addBrandToZip(zip, r, b, num){
+async function addBrandToZip(zip, b, num){
   const folder=zip.folder(fileBase(b,num));
-  for(let i=0;i<3;i++) folder.file(`${fileBase(b,num)}_${PAGE_NAMES[i]}.png`, await renderPng(r.pages[i]));
+  for(let i=0;i<3;i++){
+    const r=exportCards(b,num); // re-render every page: a remote refresh may have swapped the brand's data meanwhile
+    folder.file(`${fileBase(b,num)}_${PAGE_NAMES[i]}.png`, await renderPng(r.pages[i]));
+  }
 }
 $("#saveZip").addEventListener("click",async()=>{
-  if(showChecks()) return;
-  const btn=$("#saveZip"); btn.disabled=true; btn.textContent="만드는 중…";
+  if(showChecks()||busy) return;
+  const btn=$("#saveZip"); btn.disabled=true; btn.textContent="만드는 중…"; busy=true;
   try{
-    const zip=new JSZip(); const b=cur();
-    await addBrandToZip(zip,pageSet,b,current+1);
-    await saveFile(fileBase(b,current+1)+".zip", await zip.generateAsync({type:"blob"}));
+    const zip=new JSZip(); const b=cur(); const num=current+1;
+    await addBrandToZip(zip,b,num);
+    await saveFile(fileBase(b,num)+".zip", await zip.generateAsync({type:"blob"}));
   }catch(e){ toast("이미지를 만드는 중 문제가 생겼어요. 다시 눌러 주세요."); console.error(e); }
-  finally{ btn.disabled=false; btn.textContent="3장 ZIP으로 저장하기"; }
+  finally{ busy=false; btn.textContent="3장 ZIP으로 저장하기"; showChecks(); }
 });
 $("#exportAll").addEventListener("click",async()=>{
-  const btn=$("#exportAll"); btn.disabled=true;
-  const stage=$("#offstage"); const skipped=[];
+  if(busy) return;
+  const btn=$("#exportAll"); btn.disabled=true; busy=true; const skipped=[];
   try{
-    const zip=new JSZip(); const r=buildPages(); r.pages.forEach(p=>stage.appendChild(p));
-    for(let i=0;i<brands.length;i++){
-      const b=brands[i]; btn.textContent=`만드는 중… ${i+1}/${brands.length}`;
-      await document.fonts.ready; render(r,b,i+1);
-      const errs=Object.values(measure(r,b)).some(x=>x.level==="err");
-      if(errs){ skipped.push(`No.${pad(i+1)} ${b.name||""}`); continue; }
-      await addBrandToZip(zip,r,b,i+1);
+    const zip=new JSZip(); const list=brands.slice();
+    for(let i=0;i<list.length;i++){
+      const b=list[i], num=brands.indexOf(b)+1; btn.textContent=`만드는 중… ${i+1}/${list.length}`;
+      const r=exportCards(b,num);
+      if(Object.values(measure(r,b)).some(x=>x.level==="err")){ skipped.push(`No.${pad(num)} ${b.name||""}`.trim()); continue; }
+      await addBrandToZip(zip,b,num);
     }
-    stage.innerHTML="";
+    if(skipped.length===list.length){ toast("모든 브랜드의 글이 칸을 넘어서 저장하지 못했어요."); return; }
     await saveFile("새준상_입점브랜드_카드뉴스.zip", await zip.generateAsync({type:"blob"}));
     if(skipped.length) toast("글이 칸을 넘어서 빠진 브랜드: "+skipped.join(", "));
   }catch(e){ toast("이미지를 만드는 중 문제가 생겼어요. 다시 눌러 주세요."); console.error(e); }
-  finally{ btn.disabled=false; btn.textContent="전체 브랜드 ZIP으로 저장하기"; }
+  finally{ busy=false; btn.disabled=false; btn.textContent="전체 브랜드 ZIP으로 저장하기"; }
 });
 
 /* ---------- backup ---------- */
