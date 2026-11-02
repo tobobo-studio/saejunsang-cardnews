@@ -102,7 +102,6 @@ input[type=text]:focus,input[type=email]:focus,select:focus,textarea:focus{outli
 .done .mark img{width:42px;height:42px}
 .done h2{margin:0;font-size:24px;line-height:1.35;font-weight:800;text-wrap:balance}
 .done p{margin:0;color:var(--ink-2)}
-.again{border:2px solid var(--ink-2);background:var(--beige);border-radius:6px;padding:10px 16px;font-weight:700;cursor:pointer}
 .foot{margin-top:28px;font-size:13px;color:var(--muted);text-align:center}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media (min-width:600px){h1{font-size:34px}.card{padding:26px 26px 28px}}
@@ -195,9 +194,8 @@ input[type=text]:focus,input[type=email]:focus,select:focus,textarea:focus{outli
 
   <section class="done" id="done" hidden aria-live="polite">
     <div class="mark"><img src="data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgd2lkdGg9IjY2Ljc4NjYiIGhlaWdodD0iNzkuMzgiIHZpZXdCb3g9IjAgMCA2Ni43ODY2IDc5LjM4IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0iRnJhbWUiIGNsaXAtcGF0aD0idXJsKCNjbGlwMF8wXzg4KSI+CjxwYXRoIGlkPSJWZWN0b3IiIGQ9Ik0xNC4yODQ5IDMxLjg4MDJDMTkuODk4MyAzMi43NDExIDI1LjM5OTEgMzIuOTc1NCAzMS4wMjU5IDMzLjI2NjVDMjMuMTYzMyAyNS4yNDA4IDE3LjQ0NzcgMTguNDM5MyAxOC4wNzk0IDE3LjgxMjdDMTguNzA3IDE3LjE5MDMgMjUuMzY2MSAyMi44NzggMzMuMjQ5NCAzMC43MjQxQzMyLjk2NTUgMjUuMjAyNiAzMi43MjQgMTkuNzk4OCAzMS44Nzg1IDE0LjI4NjVDMzEuMjQ4OSAxMC4xNzUxIDMwLjMxOTkgNS4zNTk2NSAyNy44NDc2IDIuODg3NDFDMjQuMDAwNCAtMC45NTk3ODMgMTcuNzYxNSAtMC45NTk3ODMgMTMuOTE0MyAyLjg4NzQxQzExLjY3MTIgNS4xMzA0OSAxMC43MzUgOC4xODY5OCAxMS4xMDk3IDExLjEwODJDOC4xODUzMSAxMC43MzY2IDUuMTMxOSAxMS42NzI5IDIuODg4ODIgMTMuOTE2Qy0wLjk2MTQ2NCAxNy43NjMyIC0wLjk2MTQ2NCAyNC4wMDIxIDIuODg4ODIgMjcuODQ5M0M1LjM1Nzk2IDMwLjMyMTUgMTAuMTczNCAzMS4yNTE2IDE0LjI4NDkgMzEuODgxMlYzMS44ODAyWiIgZmlsbD0iI0ZGRjVFOCIvPgo8cGF0aCBpZD0iVmVjdG9yXzIiIGQ9Ik00OC44Nzc1IDE3LjgxMjhDNDkuNTA2MiAxOC40NDE1IDQzLjc0IDI1LjIzNjcgMzUuODA5MyAzMy4yNjM1QzQxLjQxODUgMzIuOTczNSA0Ni45MDI4IDMyLjczODEgNTIuNDk1NiAzMS44NzkzQzU2LjYxMTIgMzEuMjQ5NiA2MS40MjY2IDMwLjMyMDYgNjMuODk0NyAyNy44NDczQzY3Ljc0NSAyNC4wMDAxIDY3Ljc0NSAxNy43NjExIDYzLjg5NDcgMTMuOTEzOUM2MS42NTE2IDExLjY3MDggNTguNTk1MSAxMC43MzQ3IDU1LjY3MzkgMTEuMTA2MkM1Ni4wNDg2IDguMTg0OTcgNTUuMTEyMyA1LjEyODQ3IDUyLjg2OTIgMi44ODU0QzQ5LjAyMjEgLTAuOTYxNzk5IDQyLjc4MzEgLTAuOTYxNzk5IDM4LjkzNTkgMi44ODU0QzM2LjQ2MzcgNS4zNTc2MyAzNS41MzQ3IDEwLjE3MzEgMzQuOTAxOSAxNC4yODQ2QzM0LjA1NjUgMTkuODE0MyAzMy44MTcgMjUuMjM1NyAzMy41MzExIDMwLjc3NThDNDEuNTEyNCAyMi44OTg3IDQ4LjI1MSAxNy4xODYyIDQ4Ljg3NjUgMTcuODExOEw0OC44Nzc1IDE3LjgxMjhaIiBmaWxsPSIjRkZGNUU4Ii8+CjxwYXRoIGlkPSJWZWN0b3JfMyIgZD0iTTUyLjQ5NTcgMzQuOTAzN0M0Ni45NzczIDM0LjA1OTMgNDEuNTY1MiAzMy44MTg4IDM2LjAzNDQgMzMuNTMzOUM0My43NTQ2IDQxLjQzNjggNDkuMzI4NyA0OC4wODU1IDQ4LjcwNDIgNDguNzA0OEM0OC4wNzY2IDQ5LjMyNzMgNDEuNDA5MyA0My42MzI0IDMzLjUxOTggMzUuNzc5QzMzLjgwOTkgNDEuMzk4NiAzNC4wNDUyIDQ2Ljg5MjIgMzQuOTAyIDUyLjQ5NjNDMzUuNTM0OCA1Ni42MTE5IDM2LjQ2MzggNjEuNDI3MyAzOC45MzYgNjMuODk2NUM0Mi43ODMyIDY3Ljc0MzcgNDkuMDIyMiA2Ny43NDM3IDUyLjg2OTQgNjMuODk2NUM1NS4xMTI0IDYxLjY1MzQgNTYuMDQ4NyA1OC41OTY5IDU1LjY3NCA1NS42NzU2QzU4LjU5NTIgNTYuMDUwMyA2MS42NTE3IDU1LjExNDEgNjMuODk0OCA1Mi44NzFDNjcuNzQ1MSA0OS4wMjM4IDY3Ljc0NTEgNDIuNzg0OSA2My44OTQ4IDM4LjkzNDZDNjEuNDI1NyAzNi40NjU1IDU2LjYxMDIgMzUuNTM2NCA1Mi40OTU3IDM0LjkwMzdaIiBmaWxsPSIjRkZGNUU4Ii8+CjxwYXRoIGlkPSJWZWN0b3JfNCIgZD0iTTMzLjQwNjIgMzUuNjY2NkMyNS4zNTc3IDQzLjYyMjEgMTguNTM1NiA0OS40MTMxIDE3LjkwNTkgNDguNzgzNEMxNy4yODI0IDQ4LjE1OTkgMjIuOTQ3NCA0MS40NzIgMzAuNzc2IDMzLjUzMTlDMjUuMjM1OSAzMy44MTY4IDE5LjgxMzUgMzQuMDU3MyAxNC4yODM4IDM0LjkwMjdDMTAuMTcyMyAzNS41MzU1IDUuMzU2ODYgMzYuNDY0NSAyLjg4NzcyIDM4LjkzMzdDLTAuOTYyNTczIDQyLjc4NCAtMC45NjI1NzMgNDkuMDIyOSAyLjg4NzcyIDUyLjg3MDFDNS4xMzA4IDU1LjExMzEgOC4xODQxOSA1Ni4wNDk0IDExLjEwODYgNTUuNjc0N0MxMC43MzM4IDU4LjU5NiAxMS42NzAxIDYxLjY1MjQgMTMuOTEzMiA2My44OTU1QzE3Ljc2MDQgNjcuNzQyNyAyMy45OTkzIDY3Ljc0MjcgMjcuODQ2NSA2My44OTU1QzMwLjMxODcgNjEuNDI2NCAzMS4yNDg4IDU2LjYxMDkgMzEuODc3NCA1Mi40OTU0QzMyLjIzODcgNTAuMTQ5MSAzMi40ODc1IDQ3LjgyMjQgMzIuNjc4NCA0NS40OTQ2QzMyLjIxMzkgNTYuMjA3MyAzMy4wMzY2IDYxLjUwNjkgMzguNDY1MiA3OS4yOTY3TDQyLjY4NCA3Ni41MjFDMzUuMDU3OCA2Mi4xNTkzIDM0LjA3MyA1Ny4xNzA0IDMzLjQ1NTcgMzUuNzE0MUMzMy40MzkyIDM1LjY5NzYgMzMuNDIyNyAzNS42ODEgMzMuNDA2MiAzNS42NjQ1VjM1LjY2NjZaIiBmaWxsPSIjRkZGNUU4Ii8+CjwvZz4KPGRlZnM+CjxjbGlwUGF0aCBpZD0iY2xpcDBfMF84OCI+CjxyZWN0IHdpZHRoPSI2Ni43ODY2IiBoZWlnaHQ9Ijc5LjM4IiBmaWxsPSJ3aGl0ZSIvPgo8L2NsaXBQYXRoPgo8L2RlZnM+Cjwvc3ZnPgo=" alt=""></div>
-    <h2>질문지를 잘 받았어요</h2>
-    <p>보내 주신 이야기와 사진으로 소개 콘텐츠를 준비할게요. 고칠 내용이 생기면 담당자에게 편하게 알려 주세요.</p>
-    <button class="again" type="button" id="again">다른 브랜드 질문지 쓰기</button>
+    <h2 id="doneTitle">질문지를 잘 받았어요</h2>
+    <p id="doneText">보내 주신 이야기와 사진으로 소개 콘텐츠를 준비할게요. 고칠 내용이 생기면 담당자에게 편하게 알려 주세요.</p>
   </section>
 
   <p class="foot">새해준비상점 N.27 · 2026. 12. 4. – 12. 6. · KINTEX 제2전시장 6홀</p>
@@ -323,6 +321,11 @@ $("#qform").addEventListener("submit",async e=>{
   const btn=$("#send"), prog=$("#progress");
   btn.disabled=true; btn.textContent="보내는 중…";
   try{
+    // one questionnaire per brand: an email that has already sent one can't send again
+    const email=$("#q-email").value.replace(/\s+/g,"").toLowerCase();
+    let dup=false;
+    try{ const r=await sb(`/rest/v1/brands?select=id&data->>email=eq.${encodeURIComponent(email)}&limit=1`); dup=(await r.json()).length>0; }catch(_){}
+    if(dup){ showDone(true); return; }
     for(let i=0;i<3;i++){
       if(uploaded[i]) continue;
       prog.textContent=`사진을 올리는 중이에요 (${i+1}/3)`;
@@ -335,15 +338,14 @@ $("#qform").addEventListener("submit",async e=>{
     let insta=v("insta").replace(/^(https?:\/\/)?(www\.)?instagram\.com\//i,"").replace(/[\/?#].*$/,"").replace(/\s+/g,"");
     if(insta && !insta.startsWith("@")) insta="@"+insta;
     const data={
-      name:v("name"), email:v("email").replace(/\s+/g,""), section:sel.value==="unknown"?0:+sel.value, sectionUnsure:sel.value==="unknown",
+      name:v("name"), email:v("email").replace(/\s+/g,"").toLowerCase(), section:sel.value==="unknown"?0:+sel.value, sectionUnsure:sel.value==="unknown",
       hook:v("hook"), intro:v("intro"), newyear:v("newyear"), insta,
       photos:uploaded.map(u=>({src:u.src,path:u.path,w:u.w,h:u.h,scale:1,x:0,y:0,rot:0})),
       fromForm:true, submittedAt:new Date().toISOString(),
     };
     await sb("/rest/v1/brands",{method:"POST",headers:{"content-type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({ord:Date.now(),data})});
     try{ localStorage.removeItem(DRAFT_KEY); localStorage.setItem(SENT_KEY,JSON.stringify({name:data.name,at:data.submittedAt})); }catch(_){}
-    $("#qform").hidden=true; $("#sentBefore").hidden=true; $("#done").hidden=false; document.querySelectorAll(".lead,.facts").forEach(x=>x.hidden=true);
-    window.scrollTo({top:0,behavior:"smooth"});
+    showDone(false);
   }catch(err){
     console.error(err);
     $("#err-send").textContent="보내는 중에 문제가 생겼어요. 인터넷 연결을 확인하고 ‘질문지 보내기’를 다시 눌러 주세요. 이미 올라간 사진은 다시 올리지 않아요.";
@@ -351,17 +353,22 @@ $("#qform").addEventListener("submit",async e=>{
     btn.disabled=false; btn.textContent="질문지 보내기"; prog.textContent="";
   }
 });
-$("#again").addEventListener("click",()=>{
-  $("#qform").reset(); TEXT.forEach(count);
-  photos.forEach((p,i)=>{ if(p) URL.revokeObjectURL(p.preview); photos[i]=null; uploaded[i]=null; const row=box.children[i]; row.classList.remove("has","bad"); row.querySelector(".thumb").style.backgroundImage=""; row.querySelector(".pick").textContent="사진 고르기"; row.querySelector(".state").textContent=""; });
-  batch=rid(); $("#done").hidden=true; $("#qform").hidden=false; document.querySelectorAll(".lead,.facts").forEach(x=>x.hidden=false); window.scrollTo({top:0});
-});
+/* After sending, the form is gone for good on this device: one questionnaire per brand. */
+function showDone(already, name){
+  if(already){
+    $("#doneTitle").textContent="이미 질문지를 보내 주셨어요";
+    $("#doneText").textContent=(name?`‘${name}’ 질문지는 `:"질문지는 ")+"한 번만 보낼 수 있어요. 고칠 내용이 있으면 담당자에게 편하게 알려 주세요.";
+  }
+  $("#qform").hidden=true; $("#sentBefore").hidden=true; $("#done").hidden=false;
+  document.querySelectorAll(".lead,.facts").forEach(x=>x.hidden=true);
+  window.scrollTo({top:0,behavior:"smooth"});
+}
 
 /* first view */
 loadDraft(); TEXT.forEach(count);
 try{
   const s=JSON.parse(localStorage.getItem(SENT_KEY)||"null");
-  if(s&&s.name){ const n=$("#sentBefore"); n.textContent=`이 기기에서 ‘${s.name}’ 질문지를 이미 보내 주셨어요. 다른 브랜드를 쓰시거나 내용을 새로 보내려면 아래에 다시 작성해 주세요.`; n.hidden=false; }
+  if(s&&s.name) showDone(true,s.name);
 }catch(_){}
 </script>
 </body>

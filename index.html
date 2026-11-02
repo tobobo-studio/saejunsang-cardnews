@@ -83,6 +83,8 @@ button{font:inherit}
 .btn.primary:hover{background:var(--primary-press)}
 .btn.weak{background:var(--primary-weak);color:var(--primary-weak-t)}
 .btn.weak:hover{filter:brightness(.97)}
+.btn.lilac{background:#e2c4ff;color:#2a1846}
+.btn.lilac:hover{background:#d6aefc}
 .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
 .btn.sm{height:32px;padding:0 12px;font-size:13px;border-radius:8px}
 .btn.lg{height:48px;padding:0 20px;font-size:16px;border-radius:14px}
@@ -353,7 +355,7 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
     <section class="panel preview" aria-label="미리보기">
       <div class="pvhead">
         <div class="badge" id="status"></div>
-        <button class="btn primary lg" id="saveZip" type="button">3장 ZIP으로 저장하기</button>
+        <button class="btn lilac lg" id="saveZip" type="button">이미지 저장하기</button>
       </div>
       <div class="pvgrid" id="pvgrid"></div>
 
@@ -581,6 +583,7 @@ async function insertRow(b){
 
 const dirty=new Set(); let saveTimer=null, flushing=null;
 function persist(){
+  scheduleAlbum();
   clearTimeout(saveTimer);
   if(!shared){ saveTimer=setTimeout(()=>DB.set("state",{brands,current}),400); return; }
   const b=cur(); if(b&&!b.sample) dirty.add(b);
@@ -1549,17 +1552,81 @@ function exifStamp(buf, date){
   out.set(src.subarray(0,at)); out.set(app1,at); out.set(src.subarray(at),at+app1.length);
   return out;
 }
-async function renderJpeg(page, date){
+async function renderJpegRaw(page){
   const opt=await exportOpt(page);
   if(WEBKIT) await htmlToImage.toCanvas(page,opt).catch(()=>{});
   const canvas=await htmlToImage.toCanvas(page,opt);
   const blob=await new Promise(res=>canvas.toBlob(res,"image/jpeg",0.95));
   if(!blob) throw new Error("empty image");
-  return new Blob([exifStamp(await blob.arrayBuffer(),date)],{type:"image/jpeg"});
+  return new Uint8Array(await blob.arrayBuffer());
+}
+async function renderJpeg(page, date){ return new Blob([exifStamp(await renderJpegRaw(page),date)],{type:"image/jpeg"}); }
+
+/* Mobile '이미지 저장하기': the three album images are made in the background once the card settles,
+   so a tap can open the phone's save sheet right away (Safari only allows that straight from a tap).
+   Each image gets its "date taken" at the moment of saving, one second apart, so albums keep 표지 → 2 → 3. */
+const album={sig:"",jpegs:null,names:null,timer:null,promise:null};
+let dlNs=null; // the Claude app's save capability, once known
+function albumSig(b,num){
+  return JSON.stringify([num,b.name,b.sectLabel,b.section,b.hook,b.p2l1,b.p2l2,b.p2body,b.p3body,b.sizes,
+    b.photos.map(p=>[p.src?p.src.length:0,p.src?p.src.slice(-48):"",p.x,p.y,p.scale,p.rot])]);
+}
+function scheduleAlbum(){ if(!MOBILE) return; clearTimeout(album.timer); album.timer=setTimeout(prepAlbum,1500); }
+function prepAlbum(){
+  if(!MOBILE||inMail()||album.promise) return;
+  if(busy||document.hidden){ scheduleAlbum(); return; }
+  const b=cur(); if(!b) return; const num=current+1, sig=albumSig(b,num);
+  if(album.sig===sig || missingPhotos(b).length || Object.values(measure(pageSet,b)).some(x=>x.level==="err")) return;
+  busy=true;
+  album.promise=(async()=>{
+    try{
+      const jpegs=[];
+      for(let i=0;i<3;i++){
+        jpegs.push(await renderJpegRaw(exportCards(b,num).pages[i]));
+        if(cur()!==b || albumSig(b,current+1)!==sig) return; // edited meanwhile: the next pause starts over
+      }
+      Object.assign(album,{sig,jpegs,names:[0,1,2].map(i=>`${fileBase(b,num)}_${PAGE_NAMES[i]}.jpg`)});
+    }catch(e){ console.error(e); }
+    finally{ busy=false; album.promise=null; }
+  })();
+}
+function albumFiles(){
+  const base=Math.floor(Date.now()/1000)*1000;
+  return album.jpegs.map((u8,k)=>new File([exifStamp(u8,new Date(base+k*1000))],album.names[k],{type:"image/jpeg",lastModified:base+k*1000}));
+}
+async function downloadAll(files){
+  for(let i=0;i<files.length;i++){
+    const a=document.createElement("a"); a.href=URL.createObjectURL(files[i]); a.download=files[i].name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+    await new Promise(r=>setTimeout(r,700));
+  }
+  toast(`${files.length}장을 저장했어요. 갤러리의 Download 앨범을 확인해 주세요.`);
+}
+function handToAlbum(files){
+  if(IS_ANDROID) return downloadAll(files);
+  if(navigator.canShare && navigator.canShare({files})){
+    navigator.share({files}).then(()=>toast("사진 앱에서 확인해 주세요."))
+      .catch(e=>{ if(!e||e.name!=="AbortError") openSaveSheet(files,PAGE_LABELS); });
+    return;
+  }
+  openSaveSheet(files,PAGE_LABELS); // e.g. in-app browsers: long-press each image
+}
+async function saveAlbum(){
+  if(showChecks()) return;
+  const b=cur(), sig=albumSig(b,current+1);
+  if(dlNs) return saveToGallery([0,1,2]);                  // inside the Claude app
+  if(album.sig===sig && album.jpegs) return handToAlbum(albumFiles()); // ready: straight to the save sheet
+  if(album.promise){ toast("이미지를 준비하는 중이에요…"); await album.promise; }
+  if(album.sig===albumSig(cur(),current+1) && album.jpegs){
+    const files=albumFiles();
+    return IS_ANDROID?downloadAll(files):openSaveSheet(files,PAGE_LABELS); // a fresh tap is needed for the sheet
+  }
+  return saveToGallery([0,1,2]);
 }
 /* Mobile: make the cards, then hand them to the phone's photo gallery in order. */
 async function saveToGallery(idx){
-  if(showChecks()||busy) return;
+  if(showChecks()) return;
+  if(busy){ if(!album.promise) return; toast("이미지를 준비하는 중이에요…"); await album.promise; if(busy) return; }
   busy=true; const zipBtn=$("#saveZip"); zipBtn.disabled=true; zipBtn.textContent="만드는 중…";
   document.querySelectorAll(".save1").forEach(x=>x.disabled=true);
   try{
@@ -1640,10 +1707,10 @@ async function addBrandToZip(zip, b, num){
     folder.file(`${fileBase(b,num)}_${PAGE_NAMES[i]}.png`, await renderPng(r.pages[i]));
   }
 }
-const ZIP_LABEL=MOBILE?"갤러리에 3장 저장하기":"3장 ZIP으로 저장하기";
+const ZIP_LABEL="이미지 저장하기";
 $("#saveZip").textContent=ZIP_LABEL;
 $("#saveZip").addEventListener("click",async()=>{
-  if(MOBILE) return saveToGallery([0,1,2]);
+  if(MOBILE) return saveAlbum();
   if(showChecks()||busy) return;
   const btn=$("#saveZip"); btn.disabled=true; btn.textContent="만드는 중…"; busy=true;
   try{
@@ -1929,7 +1996,7 @@ function toast(t){ let n=$(".toast"); if(!n){ n=el("div","toast",document.body);
 
 /* ---------- boot ---------- */
 (async function boot(){
-  initEditor(); initPreview(); sampler(); downloads();
+  initEditor(); initPreview(); sampler(); downloads().then(d=>{ dlNs=d; });
   try{ await document.fonts.load('700 44px "Pretendard"'); }catch(_){}
   let rows=null;
   try{ rows=await fetchRows(); shared=true; }catch(e){ shared=false; }
