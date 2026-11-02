@@ -334,21 +334,21 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
         <p class="hint">미리보기에서 사진을 끌어 옮기고, 휠이나 두 손가락(벌리기·돌리기)으로 크기와 각도를 바꿀 수 있어요.</p>
       </div>
 
-      <div class="field" data-f="hook" hidden>
-        <label for="f-hook"><span><span class="stepn">3</span>브랜드 한 줄 소개</span><span class="cnt"></span></label>
-        <input type="text" id="f-hook" maxlength="34" autocomplete="off" placeholder="예: 내년을 담아가는 작은 상점 / 새로운 시작이 모인 공간">
-        <p class="hint">가운데에 ‘/’를 넣으면 두 문구 사이에 클로버가 들어가요.</p>
+      <div class="field" data-f="hook">
+        <label for="f-hook"><span><span class="stepn">3</span>한 줄 소개 · 2페이지 위</span><span class="cnt"></span></label>
+        <textarea id="f-hook" rows="2" maxlength="40" autocomplete="off" placeholder="예: 프리워커들이 모인&#10;크리에이티브 에이전시"></textarea>
+        <p class="hint">줄을 바꾼 자리 그대로 두 줄로 들어가요 (10~34자).</p>
         <div class="msg"></div>
       </div>
 
       <div class="field" data-src="intro">
-        <label for="f-intro"><span><span class="stepn">3</span>브랜드 소개</span><span class="cnt"></span></label>
-        <textarea id="f-intro" rows="4" maxlength="200" placeholder="브랜드가 보낸 소개글을 붙여넣어 주세요 (80~200자)"></textarea>
+        <label for="f-intro"><span><span class="stepn">4</span>브랜드 소개 · 2페이지 아래</span><span class="cnt"></span></label>
+        <textarea id="f-intro" rows="3" maxlength="90" placeholder="브랜드가 보낸 소개글 (50~80자, 2~3줄)"></textarea>
       </div>
 
       <div class="field" data-src="newyear">
-        <label for="f-newyear"><span><span class="stepn">4</span>새해를 준비하는 고객에게</span><span class="cnt"></span></label>
-        <textarea id="f-newyear" rows="4" maxlength="200" placeholder="브랜드가 고객에게 전하고 싶은 말을 붙여넣어 주세요 (80~200자)"></textarea>
+        <label for="f-newyear"><span><span class="stepn">5</span>새해 인사 · 3페이지</span><span class="cnt"></span></label>
+        <textarea id="f-newyear" rows="3" maxlength="90" placeholder="브랜드가 고객에게 전하는 말 (50~80자, 2~3줄)"></textarea>
       </div>
 
       <div class="cta"><button class="btn primary block big" id="generate" type="button">카드뉴스 만들기</button></div>
@@ -376,13 +376,13 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
         <div class="tweakpage stack" data-page="1">
           <div class="field" data-f="p2l1"><label for="f-p2l1">핵심 문장 1줄 <span class="cnt"></span></label><input type="text" class="mirrorHead" id="f-p2l1" maxlength="24" autocomplete="off"><div class="msg"></div></div>
           <div class="field" data-f="p2l2"><label for="f-p2l2">핵심 문장 2줄 <span class="cnt"></span></label><input type="text" class="mirrorHead" id="f-p2l2" maxlength="24" autocomplete="off"><div class="msg"></div></div>
-          <div class="field" data-f="p2body"><label for="f-p2body">설명 글 (50자 이상 · 최대 3줄) <span class="cnt"></span></label><textarea class="mirror" id="f-p2body" maxlength="90" rows="3" spellcheck="false"></textarea><div class="msg"></div></div>
+          <div class="field" data-f="p2body"><label for="f-p2body">설명 글 (50~80자 · 2~3줄) <span class="cnt"></span></label><textarea class="mirror" id="f-p2body" maxlength="90" rows="3" spellcheck="false"></textarea><div class="msg"></div></div>
         </div>
         <div class="tweakpage stack" data-page="2">
           <p class="hint">이 페이지에는 설명 글만 들어가요.</p>
-          <div class="field" data-f="p3body"><label for="f-p3body">하고 싶은 말 (50자 이상 · 최대 3줄) <span class="cnt"></span></label><textarea class="mirror" id="f-p3body" maxlength="90" rows="3" spellcheck="false"></textarea><div class="msg"></div></div>
+          <div class="field" data-f="p3body"><label for="f-p3body">하고 싶은 말 (50~80자 · 2~3줄) <span class="cnt"></span></label><textarea class="mirror" id="f-p3body" maxlength="90" rows="3" spellcheck="false"></textarea><div class="msg"></div></div>
         </div>
-        <p class="hint">‘카드뉴스 만들기’를 다시 누르면 3·4번 글로 새로 만들어요.</p>
+        <p class="hint">‘카드뉴스 만들기’를 다시 누르면 3~5번 글이 그대로 다시 들어가요.</p>
       </div>
 
       <div class="finalbar">
@@ -527,7 +527,7 @@ const FRAMES = [
 ];
 const SLOT_NAMES = ["① 메인 대표 사진","② 브랜드 소개 사진","③ 새해 인사 사진"];
 const PAGE_NAMES = ["1_메인","2_브랜드소개","3_새해를준비하는당신께"];
-const LIMITS = {name:20, email:80, sectLabel:12, hook:34, p2l1:24, p2l2:24, p2body:90, p3body:90};
+const LIMITS = {name:20, email:80, sectLabel:12, hook:34, p2l1:24, p2l2:24, p2body:80, p3body:80};
 const BASE_FS = {name:70, sect:32, hook:28, tag2:44, head2:32, body2:32, body3:32};
 const sz=(b,k)=>(b.sizes&&b.sizes[k])||1;
 
@@ -544,15 +544,15 @@ function newBrand(extra){
   return Object.assign({id:uid(), section:0, sectLabel:"", name:"", email:"", hook:"", intro:"", newyear:"", p2l1:"", p2l2:"", p2body:"", p3l1:"", p3l2:"", p3body:"",
     photos:[blankPhoto(),blankPhoto(),blankPhoto()], sizes:{name:1,sect:1,hook:1,tag2:1,head2:1,body2:1,body3:1}}, extra||{});
 }
-const SAMPLE = () => { const b=newBrand({sample:true, section:2, name:"히히웍스", hook:"프리워커들이 모인 크리에이티브 에이전시",
-  intro:"히히웍스는 즐겁게 ‘히히’ 웃으며 일하는 순간을 만들어가요. 작은 아이디어도 즐거운 시작이 될 수 있어요. 히히웍스는 매일의 생각을 기록하고, 새로운 가능성으로 만들어갑니다.",
-  newyear:"새해 계획이 아직 없어도 괜찮아요. 조금 느리게 시작해도 좋으니까요. 새로운 시작에 정해진 속도는 없으니까요. 당신만의 속도로 채워갈 새해를 히히웍스가 응원할게요."});
+const SAMPLE = () => { const b=newBrand({sample:true, section:2, name:"히히웍스", hook:"프리워커들이 모인\n크리에이티브 에이전시",
+  intro:"즐겁게 ‘히히’ 웃으며 일하는 순간을 만들어가요.\n작은 아이디어도 즐거운 시작이 될 수 있다고 믿어요.",
+  newyear:"새해 계획이 아직 없어도 괜찮아요.\n당신만의 속도로 채워갈 새해를 히히웍스가 응원할게요."});
   generateFrom(b); return b; };
-const SRC_MAX=200, SRC_MIN=80; // the questionnaire asks for 80–200 characters per answer
+const SRC_MAX=80, SRC_MIN=50; // the questionnaire asks for 50–80 characters (2–3 lines) per answer
 function updateCounts(){
   const b=cur();
-  ["intro","newyear"].forEach(k=>{ const c=document.querySelector(`[data-src="${k}"] .cnt`); const n=len(b[k]||"");
-    c.textContent=n&&n<SRC_MIN?`${n}/${SRC_MAX} · ${SRC_MIN}자 이상 권장`:`${n}/${SRC_MAX}`; c.classList.toggle("full",n>=SRC_MAX||(n>0&&n<SRC_MIN)); });
+  ["intro","newyear"].forEach(k=>{ const c=document.querySelector(`[data-src="${k}"] .cnt`); const n=len((b[k]||"").replace(/\n/g,""));
+    c.textContent=`${n}/${SRC_MAX}`; c.classList.toggle("full",n>SRC_MAX||(n>0&&n<SRC_MIN)); });
 }
 
 /* ---------- storage (IndexedDB, per browser) ---------- */
@@ -1210,19 +1210,22 @@ function keyBody(answer, kind){
 }
 // a description fits when it has BODY_MIN characters or more and stays within 3 lines (at the 90% size at most)
 const bodyFits=t=>len(t)>=BODY_MIN && bodyLinesAt(t,32*0.9)<=3 && len(t)<=LIMITS.p2body;
-function generateFrom(b, ai, aiTried){
-  let i=editAnswer(b.intro||"","intro",b.name), n=keyBody(b.newyear||"","newyear"), nAi=false;
-  if(ai){
-    const ia=b.intro?cleanAi(ai.intro,i):i;
-    if(ia.ai && (bodyFits(ia.body) || !bodyFits(i.body))) i=ia; // Claude's version is kept when its description is long enough
-    const nb=String(ai.newyear&&ai.newyear.body||"").replace(/\s+/g," ").replace(/^["'“”‘’]+|["'“”‘’]+$/g,"").trim();
-    if(b.newyear && nb && (bodyFits(nb) || !bodyFits(n))){ n=nb; nAi=true; }
+/* Cards take the brand's answers exactly as written (the questionnaire shows the same line breaks):
+   one-liner → page-2 headline (2 lines), brand story → page-2 box, new-year note → page-3 box. */
+const keepLines=s=>(s||"").replace(/\r/g,"").split("\n").map(l=>l.replace(/[ \t\u00a0]+/g," ").trim()).join("\n").replace(/^\n+|\n+$/g,"");
+function hookLines(h){ // the brand's own breaks, plus the box's wrap where a line is wider than the headline box
+  const out=[];
+  for(const line of keepLines(h).split("\n").filter(Boolean)){
+    let cur="";
+    for(const w of line.split(" ")){ const nx=cur?cur+" "+w:w; if(cur && !fits(nx)){ out.push(cur); cur=w; } else cur=nx; }
+    if(cur) out.push(cur);
   }
-  Object.assign(b,{p2l1:i.l1,p2l2:i.l2,p2body:i.body,p3l1:"",p3l2:"",p3body:n});
-  b.mode={v:2, ai:!!(i.ai||nAi), noAi:aiTried===false,
-    cut:[i.cut&&"브랜드 소개"].filter(Boolean),
-    partial:[!i.ai&&i.partial&&"브랜드 소개"].filter(Boolean),
-    short:[b.intro&&len(i.body)<BODY_MIN&&"브랜드 소개", b.newyear&&len(n)<BODY_MIN&&"새해 인사"].filter(Boolean)};
+  return out;
+}
+function generateFrom(b){
+  const hl=hookLines(b.hook);
+  Object.assign(b,{p2l1:hl[0]||"", p2l2:hl.length>2?hl.slice(1).join(" "):(hl[1]||""), p2body:keepLines(b.intro), p3l1:"", p3l2:"", p3body:keepLines(b.newyear)});
+  b.mode={v:3, overHead:hl.length>2};
 }
 /* Older saves kept one pasted answer block; move it into the separate fields once. */
 function migrate(b){
@@ -1236,6 +1239,11 @@ function migrate(b){
 function showNote(){
   const box=$("#genNote"); const md=cur().mode;
   if(!md){ box.className="msg"; box.textContent=""; return; }
+  if(md.v===3){
+    box.className="msg "+(md.overHead?"warn":"ok");
+    box.textContent="질문지 답변을 그대로 넣었어요. 줄바꿈도 브랜드가 적은 그대로예요."+(md.overHead?" 한 줄 소개가 2줄을 넘어서 2줄째에 이어 붙였어요. ‘문구 다듬기’에서 고쳐 주세요.":"");
+    return;
+  }
   box.className="msg "+(md.cut.length?"warn":"ok");
   if(md.v!==2){ box.textContent=md.ai?"Claude가 핵심 문장과 설명 글을 나눠 다듬었어요. 원문과 다른 곳이 없는지 확인해 주세요.":"원문 문장을 그대로 나눠 넣었어요."; return; }
   const extra=[
@@ -1267,26 +1275,16 @@ function initEditor(){
       cur()[k]=v; changed();
     });
   });
-  // brand's source texts (3·4) + generate
+  // brand's source answers (4·5, line breaks kept) + generate
   ["intro","newyear"].forEach(k=>{
-    $("#f-"+k).addEventListener("input",e=>{ cur()[k]=e.target.value.replace(/\n/g," "); updateCounts(); persist(); });
+    $("#f-"+k).addEventListener("input",e=>{ cur()[k]=e.target.value; updateCounts(); persist(); });
   });
-  $("#generate").addEventListener("click",async()=>{
-    const btn=$("#generate"); const b=cur();
-    if(!b.intro.trim()&&!b.newyear.trim()){ toast("3번 브랜드 소개나 4번 새해 인사를 먼저 입력해 주세요."); $("#f-intro").focus(); return; }
-    if(btn.disabled) return;
-    let ai=null, aiFail=""; const sample=await sampler();
-    if(sample){
-      btn.disabled=true; btn.textContent="Claude가 문구를 다듬는 중…";
-      try{ ai=await sample.json(aiPrompt({name:b.name,intro:b.intro,newyear:b.newyear}),{cache:false}); }
-      catch(e){ if(e&&e.code!=="cancelled") aiFail=e.code==="not_granted"||e.code==="sampling_disabled"?"Claude를 쓸 수 없어서":"Claude 다듬기에 실패해서"; }
-      finally{ btn.disabled=false; btn.textContent="카드뉴스 만들기"; }
-    }
-    if(b!==cur()) return; // switched brand while waiting
-    generateFrom(b, ai, !!sample); changed();
-    const empty=[!b.name&&"브랜드명", !b.intro&&"브랜드 소개", !b.newyear&&"새해 인사"].filter(Boolean);
-    toast(aiFail?`${aiFail} 원문에서 핵심 문장을 골라 정리했어요.`
-      :empty.length?`${empty.join(", ")}을(를) 입력하면 카드가 완성돼요.`:"카드뉴스를 만들었어요.");
+  $("#generate").addEventListener("click",()=>{
+    const b=cur();
+    if(!(b.hook||"").trim()&&!(b.intro||"").trim()&&!(b.newyear||"").trim()){ toast("3~5번 글을 먼저 입력해 주세요."); $("#f-hook").focus(); return; }
+    generateFrom(b); changed();
+    const empty=[!b.name&&"브랜드명", !(b.hook||"").trim()&&"한 줄 소개", !(b.intro||"").trim()&&"브랜드 소개", !(b.newyear||"").trim()&&"새해 인사"].filter(Boolean);
+    toast(empty.length?`${empty.join(", ")}을(를) 입력하면 카드가 완성돼요.`:"질문지 답변을 그대로 카드에 넣었어요.");
   });
   // compact photo upload tiles
   const thumbs=$("#thumbs");
