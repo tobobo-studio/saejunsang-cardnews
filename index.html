@@ -1883,8 +1883,9 @@ $("#confirmBtn").addEventListener("click",()=>{
 });
 
 /* The mail page is its own screen (#mail-<brand id>), so it can't be mixed up with editing. */
-const MAIL_TPL_KEY="sjs-mail-template-v2", CLIENT_KEY="sjs-gmail-client";
+const MAIL_TPL_KEY="sjs-mail-template-v3", CLIENT_KEY="sjs-gmail-client";
 const SENDER="〈새해준비상점 N.27〉 크리에이티브 파트너 히히웍스"; // the name every brand sees as the sender
+const SJS_IG=""; // 새해준비상점 인스타그램 아이디 (예: "@newyear_store") — 적어 두면 메일에 함께 들어가요
 const GMAIL_CLIENT_ID_DEFAULT=""; // 팀 전체가 같은 ID를 쓰려면 여기에 넣어 두세요 (공개돼도 괜찮은 값이에요)
 const DEFAULT_TPL={
   subject:"〈새해준비상점 N.27〉 {브랜드} 입점 브랜드 소개 카드뉴스를 보내드려요",
@@ -1898,8 +1899,10 @@ ${SENDER}입니다.
 2장 · 브랜드 소개
 3장 · 새해를 준비하는 당신께
 
-카드뉴스는 새해준비상점 인스타그램에 순서대로 소개될 예정이에요.
-브랜드 계정에서도 함께 공유해 주시면 큰 힘이 돼요.
+카드뉴스는 {브랜드} 인스타그램 계정에 1장부터 순서대로 올려 주세요.
+올리실 때 새해준비상점 인스타그램 계정${SJS_IG?`(${SJS_IG})`:""}을 '공동 작업자'로 초대해 주시면,
+새해준비상점 계정에도 같은 게시물이 함께 소개돼요.
+(게시물 올리기 → 사람 태그하기 → 공동 작업자 초대)
 
 고칠 부분이 있거나 궁금한 점이 있으면 이 메일로 편하게 답장 주세요.
 고맙습니다.

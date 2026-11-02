@@ -148,11 +148,6 @@ input[type=text]:focus,input[type=email]:focus,select:focus,textarea:focus{outli
         </select>
         <p class="err"></p>
       </div>
-      <div class="field" data-k="insta">
-        <label class="label" for="q-insta"><span>인스타그램 계정<span class="opt">선택</span></span></label>
-        <input type="text" id="q-insta" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@hiheeworks">
-        <p class="help">소개할 때 브랜드 계정을 함께 태그할게요.</p>
-      </div>
     </section>
 
     <section class="card" aria-labelledby="h-story">
@@ -232,7 +227,7 @@ const len=s=>[...(s||"")].length;
 const sel=$("#q-section");
 SECTIONS.forEach((n,i)=>{ const o=document.createElement("option"); o.value=i; o.textContent=n; sel.appendChild(o); });
 { const o=document.createElement("option"); o.value="unknown"; o.textContent="아직 모르겠어요"; sel.appendChild(o); }
-const TEXT=["name","email","insta","hook","intro","newyear"];
+const TEXT=["name","email","hook","intro","newyear"];
 const MAX={name:20,hook:30,intro:200,newyear:200};
 const MIN={intro:80,newyear:80}; // the two story answers need at least this many characters
 const flagged={}; // story answers that were left (or sent) too short show their line as a warning
@@ -364,11 +359,9 @@ $("#qform").addEventListener("submit",async e=>{
     }
     prog.textContent="답변을 보내는 중이에요";
     const v=k=>$("#q-"+k).value.replace(/\s+/g," ").trim();
-    let insta=v("insta").replace(/^(https?:\/\/)?(www\.)?instagram\.com\//i,"").replace(/[\/?#].*$/,"").replace(/\s+/g,"");
-    if(insta && !insta.startsWith("@")) insta="@"+insta;
     const data={
       name:v("name"), email:v("email").replace(/\s+/g,"").toLowerCase(), section:sel.value==="unknown"?0:+sel.value, sectionUnsure:sel.value==="unknown",
-      hook:v("hook"), intro:v("intro"), newyear:v("newyear"), insta,
+      hook:v("hook"), intro:v("intro"), newyear:v("newyear"),
       photos:uploaded.map(u=>({src:u.src,path:u.path,w:u.w,h:u.h,scale:1,x:0,y:0,rot:0})),
       fromForm:true, submittedAt:new Date().toISOString(),
     };
