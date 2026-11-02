@@ -161,6 +161,8 @@ details.sec>.stack{margin:4px 0 12px}
 .pvbox>.cn-page{position:absolute;left:0;top:0;transform-origin:0 0}
 
 /* Toast */
+.updbar{position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:45;display:flex;align-items:center;gap:12px;background:var(--toast);color:var(--on-toast);padding:10px 12px 10px 18px;border-radius:14px;font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.18);max-width:calc(100vw - 24px)}
+.updbar button{border:0;border-radius:10px;background:#fd7242;color:#fff;font:inherit;font-weight:700;padding:8px 14px;cursor:pointer;white-space:nowrap}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:40!important;background:var(--toast);color:var(--on-toast);padding:14px 20px;border-radius:16px;font-weight:500;font-size:15px;line-height:22.5px;z-index:20;max-width:calc(100vw - 32px);box-shadow:0 8px 24px rgba(0,0,0,.16)}
 
 /* confirm + mail sending */
@@ -2119,6 +2121,28 @@ $("#addBrand").addEventListener("click",()=>{
 });
 let toastTimer;
 function toast(t){ let n=$(".toast"); if(!n){ n=el("div","toast",document.body); n.setAttribute("role","status"); } n.textContent=t; n.hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>n.hidden=true,3200); }
+
+/* ---------- always the newest version ----------
+   GitHub Pages lets browsers keep a page for up to 10 minutes. On opening, the page asks for version.json
+   past every cache and, when a newer build is up, reloads itself once at "?v=<build>" (a URL no cache has).
+   While someone is working it only offers the reload, after saving what is pending. */
+const BUILD="20261103-011835", BUILD_KIND="maker";
+async function latestBuild(){
+  if(!/github\.io$/.test(location.hostname)) return null;
+  try{ const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"}); if(!r.ok) return null; return (await r.json())[BUILD_KIND]||null; }catch(_){ return null; }
+}
+const freshUrl=v=>location.pathname+"?v="+encodeURIComponent(v)+location.hash;
+async function checkUpdate(onOpen){
+  const v=await latestBuild();
+  if(!v || v===BUILD || new URLSearchParams(location.search).get("v")===v) return; // already tried this build (the CDN may lag a little)
+  if(onOpen && !dirty.size){ location.replace(freshUrl(v)); return; }
+  if(document.querySelector(".updbar")) return;
+  const bar=el("div","updbar",document.body); bar.setAttribute("role","status");
+  el("span","",bar).textContent="새 버전이 올라왔어요.";
+  const go=el("button","",bar); go.type="button"; go.textContent="새로고침";
+  go.onclick=async()=>{ go.disabled=true; go.textContent="저장하는 중…"; try{ await flush(); }catch(_){} location.replace(freshUrl(v)); };
+}
+checkUpdate(true); setInterval(()=>checkUpdate(false),120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(false); });
 
 /* ---------- boot ---------- */
 (async function boot(){

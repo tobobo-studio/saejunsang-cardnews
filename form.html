@@ -431,6 +431,18 @@ function showDone(already, name){
   window.scrollTo({top:0,behavior:"smooth"});
 }
 
+/* always the newest version: browsers may keep this page for up to 10 minutes, so on opening it checks
+   version.json past every cache and, if a newer build is up, reloads once at "?v=<build>" (drafts are kept) */
+const BUILD="20261103-011835";
+(async()=>{
+  if(!/github\.io$/.test(location.hostname)) return;
+  try{
+    const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"}); if(!r.ok) return;
+    const v=(await r.json()).form;
+    if(v && v!==BUILD && new URLSearchParams(location.search).get("v")!==v){ saveDraft(); location.replace(location.pathname+"?v="+encodeURIComponent(v)+location.hash); }
+  }catch(_){}
+})();
+
 /* first view */
 loadDraft(); TEXT.forEach(count); layoutMirrors();
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(layoutMirrors);
