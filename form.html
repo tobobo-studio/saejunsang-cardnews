@@ -411,7 +411,7 @@ $("#qform").addEventListener("submit",async e=>{
       fromForm:true, submittedAt:new Date().toISOString(),
     };
     await sb("/rest/v1/brands",{method:"POST",headers:{"content-type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({ord:Date.now(),data})});
-    try{ localStorage.removeItem(DRAFT_KEY); localStorage.setItem(SENT_KEY,JSON.stringify({name:data.name,at:data.submittedAt})); }catch(_){}
+    try{ localStorage.removeItem(DRAFT_KEY); localStorage.setItem(SENT_KEY,JSON.stringify({name:data.name,email:data.email,at:data.submittedAt})); }catch(_){}
     showDone(false);
   }catch(err){
     console.error(err);
@@ -433,7 +433,7 @@ function showDone(already, name){
 
 /* always the newest version: browsers may keep this page for up to 10 minutes, so on opening it checks
    version.json past every cache and, if a newer build is up, reloads once at "?v=<build>" (drafts are kept) */
-const BUILD="20261103-011835";
+const BUILD="20261103-012434";
 (async()=>{
   if(!/github\.io$/.test(location.hostname)) return;
   try{
@@ -448,10 +448,24 @@ loadDraft(); TEXT.forEach(count); layoutMirrors();
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(layoutMirrors);
 // Pretendard arrives in pieces as new characters are typed: measure again whenever a piece lands
 if(document.fonts&&document.fonts.addEventListener) document.fonts.addEventListener("loadingdone",()=>Object.keys(STORY).forEach(count));
-try{
-  const s=JSON.parse(localStorage.getItem(SENT_KEY)||"null");
-  if(s&&s.name) showDone(true,s.name);
-}catch(_){}
+/* A device that already sent shows the thank-you screen. If the team has since cleared that answer
+   (it is no longer in the list), the device forgets it and the questionnaire opens again. */
+(async()=>{
+  let s=null; try{ s=JSON.parse(localStorage.getItem(SENT_KEY)||"null"); }catch(_){}
+  if(!s||!s.name) return;
+  showDone(true,s.name);
+  try{
+    const q=s.email?`data->>email=eq.${encodeURIComponent(s.email)}`:`data->>name=eq.${encodeURIComponent(s.name)}&data->>fromForm=eq.true`;
+    const r=await sb(`/rest/v1/brands?select=id&${q}&limit=1`);
+    if((await r.json()).length) return;
+    try{ localStorage.removeItem(SENT_KEY); }catch(_){}
+    $("#done").hidden=true; $("#qform").hidden=false;
+    document.querySelectorAll(".lead,.facts").forEach(x=>x.hidden=false);
+    $("#doneTitle").textContent="질문지를 잘 받았어요";
+    $("#doneText").textContent="보내 주신 이야기와 사진으로 소개 콘텐츠를 준비할게요. 고칠 내용이 생기면 담당자에게 편하게 알려 주세요.";
+    layoutMirrors();
+  }catch(_){} // offline: keep the thank-you screen
+})();
 </script>
 </body>
 </html>
