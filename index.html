@@ -58,6 +58,14 @@ header.top p{margin:0;color:var(--t3);font-size:15px;line-height:22.5px;max-widt
 .stack{display:flex;flex-direction:column;gap:16px}
 
 /* ListRow: brand list */
+.bfilter{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--fill);margin:0 0 10px}
+.bf{flex:1;min-width:0;height:34px;border:0;border-radius:9px;background:transparent;color:var(--t3);font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;padding:0 4px}
+.bf b{font-weight:600;color:var(--t4);font-variant-numeric:tabular-nums;margin-left:2px}
+.bf:hover{color:var(--t1)}
+.bf.on{background:var(--surface);color:var(--t1);box-shadow:0 1px 4px rgba(2,32,71,.1)}
+.bf.on b{color:var(--primary)}
+.blist .empty{cursor:default;color:var(--t3);font-size:14px;justify-content:center;padding:18px 8px}
+.blist .empty:hover{background:transparent}
 .blist{list-style:none;margin:0 -8px 12px;padding:0;display:flex;flex-direction:column;gap:2px}
 .blist li{display:flex;align-items:center;gap:12px;border-radius:14px;padding:10px 8px 10px 12px;cursor:pointer;transition:background .12s}
 .blist li:hover{background:var(--fill)}
@@ -281,6 +289,11 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
   <div class="grid">
     <aside class="panel brands">
       <h2>입점 브랜드</h2>
+      <div class="bfilter" role="tablist" aria-label="발송 상태로 보기">
+        <button type="button" class="bf on" role="tab" data-f="all">전체 <b></b></button>
+        <button type="button" class="bf" role="tab" data-f="unsent">미발송 <b></b></button>
+        <button type="button" class="bf" role="tab" data-f="sent">발송완료 <b></b></button>
+      </div>
       <ul class="blist" id="blist"></ul>
       <div class="stack" style="gap:8px">
         <button class="btn weak lg block" id="addBrand" type="button">브랜드 추가하기</button>
@@ -655,7 +668,7 @@ async function pull(){
   const forms=arrived.filter(b=>b.fromForm);
   if(autoGenerate(arrived)) flush();
   if(forms.length) toast(`질문지 ${forms.length}건이 새로 들어왔어요: ${forms.map(b=>(b.name||"").trim()).filter(Boolean).join(", ")}`);
-  brands=next.concat(brands.filter(b=>!b._remote));
+  brands=next.concat(brands.filter(b=>!b._remote)); if(sortBrands()) saveOrder();
   if(!brands.length) brands=[SAMPLE()];
   const idx=brands.indexOf(curB);
   if(idx<0){ current=Math.min(current,brands.length-1); curChanged=true; } else current=idx;
@@ -1304,9 +1317,19 @@ function changed(full=true){
 }
 
 /* ---------- brand list ---------- */
+let listFilter=(()=>{ try{ return localStorage.getItem("sjs-list-filter")||"all"; }catch(_){ return "all"; } })();
+document.querySelectorAll(".bf").forEach(btn=>btn.addEventListener("click",()=>{
+  listFilter=btn.dataset.f; try{ localStorage.setItem("sjs-list-filter",listFilter); }catch(_){}
+  renderList();
+}));
 function renderList(){
   const ul=$("#blist"); ul.innerHTML="";
+  const sentN=brands.filter(isSent).length, counts={all:brands.length,unsent:brands.length-sentN,sent:sentN};
+  document.querySelectorAll(".bf").forEach(btn=>{ const on=btn.dataset.f===listFilter; btn.classList.toggle("on",on); btn.setAttribute("aria-selected",on); btn.querySelector("b").textContent=counts[btn.dataset.f]; });
+  const shown=b=>listFilter==="all"||(listFilter==="sent")===isSent(b);
+  if(!brands.some(shown)){ el("li","empty",ul).textContent=listFilter==="sent"?"아직 발송완료된 브랜드가 없어요.":"미발송 브랜드가 없어요."; }
   brands.forEach((b,i)=>{
+    if(!shown(b)) return;
     const s=SECTIONS[b.section];
     const li=el("li",i===current?"on":"",ul); li.tabIndex=0;
     li.innerHTML=`<span class="no">No.${pad(i+1)}</span><span class="dot" style="background:${s.color==="o"?"#fd7242":"#e2c4ff"}"></span>
@@ -1329,14 +1352,22 @@ function renderList(){
   });
 }
 function updateListItem(){
-  const li=$("#blist").children[current]; if(!li) return;
+  const li=$("#blist").querySelector("li.on"); if(!li||!li.querySelector(".nm")) return;
   const b=cur(); const nm=li.querySelector(".nm"); nm.firstChild.textContent=b.name||"이름 없음";
 }
 function move(i,d){
   const j=i+d; if(j<0||j>=brands.length) return;
   [brands[i],brands[j]]=[brands[j],brands[i]];
   if(current===i) current=j; else if(current===j) current=i;
-  select(current); saveOrder();
+  sortBrands(); select(current); saveOrder();
+}
+/* Brands whose mail has gone out always sit at the bottom of the list (in the order they were sent). */
+const isSent=b=>!!(b.mail&&b.mail.sentAt);
+function sortBrands(){
+  const cb=brands[current];
+  const next=brands.filter(b=>!isSent(b)).concat(brands.filter(isSent).sort((a,b)=>String(a.mail.sentAt).localeCompare(String(b.mail.sentAt))));
+  if(next.every((b,i)=>b===brands[i])) return false;
+  brands=next; current=Math.max(0,brands.indexOf(cb)); return true;
 }
 function select(i){ current=i; render(pageSet,cur(),current+1); fillEditor(); renderList(); showChecks(); persist(); }
 
@@ -1742,8 +1773,8 @@ $("#exportAll").addEventListener("click",async()=>{
 const EMAIL_RE=/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const fmtDate=iso=>{ const d=new Date(iso); return isNaN(d)?"":`${d.getMonth()+1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
 function mailState(b){
-  if(b.mail&&b.mail.sentAt) return {label:"발송 완료",cls:"sent"};
-  if(b.confirmedAt) return {label:"컨펌 완료",cls:"ok"};
+  if(b.mail&&b.mail.sentAt) return {label:"발송완료",cls:"sent"};
+  if(b.confirmedAt) return {label:"컨펌완료",cls:"ok"};
   return {label:"",cls:""};
 }
 function statusLine(b){
@@ -1764,12 +1795,13 @@ $("#confirmBtn").addEventListener("click",()=>{
 });
 
 /* The mail page is its own screen (#mail-<brand id>), so it can't be mixed up with editing. */
-const MAIL_TPL_KEY="sjs-mail-template", CLIENT_KEY="sjs-gmail-client";
+const MAIL_TPL_KEY="sjs-mail-template-v2", CLIENT_KEY="sjs-gmail-client";
+const SENDER="〈새해준비상점 N.27〉 크리에이티브 파트너 히히웍스"; // the name every brand sees as the sender
 const GMAIL_CLIENT_ID_DEFAULT=""; // 팀 전체가 같은 ID를 쓰려면 여기에 넣어 두세요 (공개돼도 괜찮은 값이에요)
 const DEFAULT_TPL={
-  subject:"[새해준비상점] {브랜드} 입점 브랜드 소개 카드뉴스를 보내드려요",
+  subject:"〈새해준비상점 N.27〉 {브랜드} 입점 브랜드 소개 카드뉴스를 보내드려요",
   body:`안녕하세요, {브랜드} 담당자님.
-새해준비상점입니다.
+${SENDER}입니다.
 
 보내 주신 이야기와 사진으로 {브랜드} 소개 카드뉴스를 만들었어요.
 완성된 이미지 3장을 첨부해 보내드려요.
@@ -1784,7 +1816,7 @@ const DEFAULT_TPL={
 고칠 부분이 있거나 궁금한 점이 있으면 이 메일로 편하게 답장 주세요.
 고맙습니다.
 
-새해준비상점 드림`};
+${SENDER} 드림`};
 const store={ get(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(_){} } };
 function mailTemplate(){ try{ return Object.assign({},DEFAULT_TPL,JSON.parse(store.get(MAIL_TPL_KEY)||"{}")); }catch(_){ return DEFAULT_TPL; } }
 const fillTpl=(t,b)=>t.replace(/\{브랜드\}/g,(b.name||"").trim()||"브랜드");
@@ -1880,7 +1912,7 @@ function getToken(){ // call straight from a click so the sign-in popup isn't bl
   return new Promise((resolve,reject)=>{
     if(gToken && Date.now()<gTokenExp-60000) return resolve(gToken);
     if(!(window.google&&google.accounts&&google.accounts.oauth2)) return reject(new Error("gis_not_loaded"));
-    if(!tokenClient) tokenClient=google.accounts.oauth2.initTokenClient({client_id:gmailClientId(),scope:"https://www.googleapis.com/auth/gmail.send",callback:()=>{}});
+    if(!tokenClient) tokenClient=google.accounts.oauth2.initTokenClient({client_id:gmailClientId(),scope:"https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email",callback:()=>{}});
     tokenClient.callback=r=>{ if(r.error) return reject(new Error(r.error)); gToken=r.access_token; gTokenExp=Date.now()+(+r.expires_in||3600)*1000; resolve(gToken); };
     tokenClient.error_callback=e=>reject(new Error((e&&e.type)||"popup_failed"));
     tokenClient.requestAccessToken();
@@ -1896,11 +1928,15 @@ function encHeader(text){ // RFC 2047, split so each encoded word stays short
   return words.map(w=>`=?UTF-8?B?${u8b64(new TextEncoder().encode(w))}?=`).join("\r\n ");
 }
 const escHtml=t=>t.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-async function buildMime({to,subject,body,files}){
+async function senderAddress(token){
+  try{ const r=await fetch("https://www.googleapis.com/oauth2/v3/userinfo",{headers:{Authorization:"Bearer "+token}}); if(!r.ok) return ""; return (await r.json()).email||""; }catch(_){ return ""; }
+}
+async function buildMime({to,subject,body,files,from}){
   const mixed="sjs-mixed-"+uid()+uid(), alt="sjs-alt-"+uid()+uid();
   const enc=t=>wrap76(u8b64(new TextEncoder().encode(t)));
   const html=`<div style="font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:15px;line-height:1.7;color:#191f28">${escHtml(body).replace(/\n/g,"<br>")}</div>`;
   const out=[
+    ...(from?[`From: ${encHeader(SENDER)} <${from}>`]:[]),
     `To: ${to}`,`Subject: ${encHeader(subject)}`,"MIME-Version: 1.0",`Content-Type: multipart/mixed; boundary="${mixed}"`,"",
     `--${mixed}`,`Content-Type: multipart/alternative; boundary="${alt}"`,"",
     `--${alt}`,'Content-Type: text/plain; charset="UTF-8"',"Content-Transfer-Encoding: base64","",enc(body),
@@ -1919,7 +1955,8 @@ async function buildMime({to,subject,body,files}){
 function markSent(b,to,subject,via){
   const rec={sentAt:new Date().toISOString(),to,subject,via};
   b.mail=rec; b.mailLog=(b.mailLog||[]).concat(rec); if(to) b.email=to;
-  changed(); openMail();
+  changed(); if(sortBrands()) saveOrder();
+  renderList(); openMail();
 }
 function mailInputs(){
   if(!checkTo()){ $("#m-to").focus(); return null; }
@@ -1940,7 +1977,7 @@ $("#m-send").addEventListener("click",async()=>{
   catch(e){ res.className="msg err"; res.textContent=e.message==="gis_not_loaded"?"Google 로그인 창을 불러오는 중이에요. 잠시 뒤 다시 눌러 주세요.":e.message==="popup_closed"?"Google 로그인 창이 닫혔어요. 다시 눌러 주세요.":"Google 계정 연결이 안 됐어요. 연결 설정의 클라이언트 ID와 테스트 사용자를 확인해 주세요."; loadGis().catch(()=>{}); return; }
   const btn=$("#m-send"); btn.disabled=true; btn.textContent="보내는 중…"; res.className="msg"; res.textContent="";
   try{
-    const raw=await buildMime({...v,files:mail.files});
+    const raw=await buildMime({...v,files:mail.files,from:await senderAddress(token)});
     const r=await fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media",{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"message/rfc822"},body:raw});
     if(r.status===401){ gToken=null; throw new Error("auth"); }
     if(!r.ok) throw new Error("http "+r.status+" "+(await r.text()).slice(0,200));
@@ -2002,6 +2039,7 @@ function toast(t){ let n=$(".toast"); if(!n){ n=el("div","toast",document.body);
   try{ rows=await fetchRows(); shared=true; }catch(e){ shared=false; }
   if(shared){
     brands=rows.map(fromRow); if(!brands.length) brands=[SAMPLE()];
+    if(sortBrands()) saveOrder();
     current=0; offerLocalImport();
     if(autoGenerate(brands)) flush();
     setInterval(pull,6000); window.addEventListener("focus",pull);
