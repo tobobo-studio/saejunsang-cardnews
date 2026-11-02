@@ -347,12 +347,12 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
 
       <div class="field" data-src="intro">
         <label for="f-intro"><span><span class="stepn">4</span>브랜드 소개</span><span class="cnt"></span></label>
-        <textarea id="f-intro" rows="4" maxlength="150" placeholder="브랜드가 보낸 소개글을 붙여넣어 주세요 (150자 이내)"></textarea>
+        <textarea id="f-intro" rows="4" maxlength="200" placeholder="브랜드가 보낸 소개글을 붙여넣어 주세요 (80~200자)"></textarea>
       </div>
 
       <div class="field" data-src="newyear">
         <label for="f-newyear"><span><span class="stepn">5</span>새해를 준비하는 고객에게</span><span class="cnt"></span></label>
-        <textarea id="f-newyear" rows="4" maxlength="150" placeholder="브랜드가 고객에게 전하고 싶은 말을 붙여넣어 주세요 (150자 이내)"></textarea>
+        <textarea id="f-newyear" rows="4" maxlength="200" placeholder="브랜드가 고객에게 전하고 싶은 말을 붙여넣어 주세요 (80~200자)"></textarea>
       </div>
 
       <div class="cta"><button class="btn primary block big" id="generate" type="button">카드뉴스 만들기</button></div>
@@ -380,11 +380,11 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
         <div class="tweakpage stack" data-page="1">
           <div class="field" data-f="p2l1"><label for="f-p2l1">핵심 문장 1줄 <span class="cnt"></span></label><input type="text" class="mirrorHead" id="f-p2l1" maxlength="24" autocomplete="off"><div class="msg"></div></div>
           <div class="field" data-f="p2l2"><label for="f-p2l2">핵심 문장 2줄 <span class="cnt"></span></label><input type="text" class="mirrorHead" id="f-p2l2" maxlength="24" autocomplete="off"><div class="msg"></div></div>
-          <div class="field" data-f="p2body"><label for="f-p2body">설명 글 (최대 3줄) <span class="cnt"></span></label><textarea class="mirror" id="f-p2body" maxlength="90" rows="3" spellcheck="false"></textarea><div class="msg"></div></div>
+          <div class="field" data-f="p2body"><label for="f-p2body">설명 글 (50자 이상 · 최대 3줄) <span class="cnt"></span></label><textarea class="mirror" id="f-p2body" maxlength="90" rows="3" spellcheck="false"></textarea><div class="msg"></div></div>
         </div>
         <div class="tweakpage stack" data-page="2">
           <p class="hint">이 페이지에는 설명 글만 들어가요.</p>
-          <div class="field" data-f="p3body"><label for="f-p3body">하고 싶은 말 (최대 3줄) <span class="cnt"></span></label><textarea class="mirror" id="f-p3body" maxlength="90" rows="3" spellcheck="false"></textarea><div class="msg"></div></div>
+          <div class="field" data-f="p3body"><label for="f-p3body">하고 싶은 말 (50자 이상 · 최대 3줄) <span class="cnt"></span></label><textarea class="mirror" id="f-p3body" maxlength="90" rows="3" spellcheck="false"></textarea><div class="msg"></div></div>
         </div>
         <p class="hint">‘카드뉴스 만들기’를 다시 누르면 4·5번 글로 새로 만들어요.</p>
       </div>
@@ -540,10 +540,11 @@ const SAMPLE = () => { const b=newBrand({sample:true, section:2, name:"히히웍
   intro:"히히웍스는 즐겁게 ‘히히’ 웃으며 일하는 순간을 만들어가요. 작은 아이디어도 즐거운 시작이 될 수 있어요. 히히웍스는 매일의 생각을 기록하고, 새로운 가능성으로 만들어갑니다.",
   newyear:"새해 계획이 아직 없어도 괜찮아요. 조금 느리게 시작해도 좋으니까요. 새로운 시작에 정해진 속도는 없으니까요. 당신만의 속도로 채워갈 새해를 히히웍스가 응원할게요."});
   generateFrom(b); return b; };
-const SRC_MAX=150; // the questionnaire allows answers up to 150 characters
+const SRC_MAX=200, SRC_MIN=80; // the questionnaire asks for 80–200 characters per answer
 function updateCounts(){
   const b=cur();
-  ["intro","newyear"].forEach(k=>{ const c=document.querySelector(`[data-src="${k}"] .cnt`); const n=len(b[k]||""); c.textContent=`${n}/${SRC_MAX}`; c.classList.toggle("full",n>=SRC_MAX); });
+  ["intro","newyear"].forEach(k=>{ const c=document.querySelector(`[data-src="${k}"] .cnt`); const n=len(b[k]||"");
+    c.textContent=n&&n<SRC_MIN?`${n}/${SRC_MAX} · ${SRC_MIN}자 이상 권장`:`${n}/${SRC_MAX}`; c.classList.toggle("full",n>=SRC_MAX||(n>0&&n<SRC_MIN)); });
 }
 
 /* ---------- storage (IndexedDB, per browser) ---------- */
@@ -834,8 +835,10 @@ function measure(r, b){
     if(!b[k]) return;
     const p=r.body[i]; const lh=parseFloat(p.style.fontSize)*1.55;
     const lines=Math.round(p.offsetHeight/lh);
+    const n=len(b[k]);
     if(lines>3) out[k]={level:"err",text:`${lines}줄이 됐어요. 최대 3줄까지만 들어가요.`};
-    else out[k]={level:"ok",text:`${lines}줄`};
+    else if(n<BODY_MIN) out[k]={level:"warn",text:`${lines}줄 · ${n}자예요. ${BODY_MIN}자 이상 채워 주세요.`};
+    else out[k]={level:"ok",text:`${lines}줄 · ${n}자`};
   });
   if(!b.p2l1&&!b.p2l2) out.p2l1={level:"warn",text:"핵심 문장을 입력해 주세요."};
   if(!b.name) out.name={level:"warn",text:"브랜드명을 입력하세요."};
@@ -928,10 +931,48 @@ function bodyLines(s, fs=32){ // greedy word wrap, the way the card breaks lines
   for(const word of s.split(" ")){ const nx=line?line+" "+word:word; if(line && w(nx)>BODY_W){ n++; line=word; } else line=nx; }
   return n+(line?1:0);
 }
-const SENT_END=/(니다|[가-힣]요|이다|[한된는간온운준인]다|있다|없다|[았었였했겠]다|죠|자)$/;
+const SENT_END=/(니다|[가-힣]요|이다|[한된는간온운준인]다|있다|없다|[았었였했겠]다|죠|(하|가|보|오|되|웃|쉬|읽|먹|살|걷)자)$/;
 const NOT_END=/(필요|중요|주요|수요|소요|요요)$/;
+/* Long run-on sentences ("…만들고 있으며 …그려요") are split where a connecting ending can close a
+   sentence on its own, so the 200-character answers can be shared out between the headline and the description. */
+const SPLIT_MIN=55;
+const batchim=ch=>{ const c=(ch||"").charCodeAt(0)-0xAC00; return c>=0 && c<11172 && c%28!==0; };
+function closeClause(word, next, prev, hasSubj, formal){
+  const w=word.replace(/[,，]$/,""), comma=w!==word; let m;
+  if(comma && SENT_END.test(w) && !NOT_END.test(w)) return w+(/(까요|나요|가요|을까|할까)$/.test(w)?"?":""); // "…어떨까요, …" (a full stop typed as a comma)
+  if(/(하고|되고)$/.test(w) && next && /^(있|싶|계|말|보|주|놓|두|나서|난|갈|와)/.test(next)) return null; // 하고 있다 · 되고 싶다
+  if((m=w.match(/^(.+)하(고|며)$/))) return m[1]+(formal?"합니다":"해요");
+  if((m=w.match(/^(.*)있(고|으며)$/))) return m[1]+(formal?"있습니다":"있어요");
+  if((m=w.match(/^(.*)없(고|으며)$/))) return m[1]+(formal?"없습니다":"없어요");
+  if((m=w.match(/^(.+)되(고|며)$/))) return m[1]+(formal?"됩니다":"돼요");
+  if((m=w.match(/^(.+)이며$/)) && batchim(m[1].slice(-1))) return m[1]+(formal?"입니다":"이에요");
+  // "히히웍스는 … 작은 스튜디오로, …" → "… 작은 스튜디오예요."
+  if((comma || /(브랜드|스튜디오|공방|가게|상점|책방|카페|베이커리|꽃집|회사|팀|매장|공간|곳)(으로|로)$/.test(w)) && hasSubj && prev && MOD_END.test(prev) && !/(그대로|스스로|서로|새로|따로|주로|대로|로서|로써)$/.test(w) && (m=w.match(/^(.+?)(으로|로)$/))){
+    const nn=m[1]; return nn+(formal?"입니다":batchim(nn.slice(-1))?"이에요":"예요");
+  }
+  return null;
+}
+function splitLong(s, formal){
+  if(len(s)<=SPLIT_MIN) return [s];
+  const words=s.split(" "); let best=null;
+  const hasSubj=words.slice(0,3).some(x=>/[가-힣](은|는)$/.test(x));
+  for(let k=1;k<words.length-1;k++){
+    const end=closeClause(words[k],words[k+1],words[k-1],hasSubj,formal); if(!end) continue;
+    const head=[...words.slice(0,k),end].join(" ")+(/[.?!~]$/.test(end)?"":"."), rest=words.slice(k+1).join(" ");
+    if(len(head)<10||len(rest)<10) continue;
+    // the second half must stand on its own: it needs its own subject or object ("…기록하고 | 새로운 가능성으로 만들어 갑니다" doesn't)
+    if(!rest.split(" ").slice(0,-1).some(x=>/[가-힣](을|를|이|가|은|는|도)[,，]?$/.test(x))) continue;
+    const bal=Math.abs(len(head)-len(rest));
+    if(!best||bal<best.bal) best={head,rest,bal};
+  }
+  return best?[...splitLong(best.head,formal),...splitLong(best.rest,formal)]:[s];
+}
 function sentencesOf(answer){
   const t=answer.replace(/\s+/g," ").trim(); if(!t) return [];
+  const formal=(t.match(/니다[.!~]*(\s|$)/g)||[]).length > (t.match(/요[.!~]*(\s|$)/g)||[]).length;
+  return sentencesRaw(t).flatMap(s=>splitLong(s,formal)).map(s=>/[.!?~…"'”’)]$/.test(s)||!SENT_END.test(s)?s:s+".");
+}
+function sentencesRaw(t){
   const parts=(t.match(/[^.!?。…~]+(?:[.!?。…~]+["'”’)]*|$)/g)||[t]).map(s=>s.trim()).filter(Boolean);
   // "고민이 많다면... 찾아와": an ellipsis after a connecting ending doesn't end the sentence
   const out=[];
@@ -979,7 +1020,7 @@ function sentScore(s,i,n,kind){
   let sc=0;
   if(KEY[kind].test(s)) sc+=2;
   if(kind==="intro" && i===0) sc+=1.5;
-  if(kind==="newyear"){ if(i===n-1) sc+=1; if(i===0) sc+=0.5; }
+  if(kind==="newyear"){ if(i===n-1) sc+=1; if(i===0) sc+=0.5; if(/(응원|바라|바랄|기원|빌어|빕니다)/.test(s)) sc+=1.5; } // the cheer is the message of page 3
   if(/[!~]["'”’)]*$/.test(s)) sc+=0.3;
   if(CONJ.test(s)) sc-=1;                                                 // leans on what came before
   if(/(니까요?|거든요?|때문이에요|때문이죠|때문입니다)[.!~]*$/.test(s)) sc-=1.5; // a reason, not the message
@@ -1023,25 +1064,68 @@ function headOptions(ss, kind, name){
   }
   return opts.sort((a,b)=>b.score-a.score);
 }
-// Description: the sentences not used on top, in their original order, trimmed to ≤3 card lines.
-function buildBody(ss, opt, kind){
-  const n=ss.length, sc=ss.map((s,i)=>sentScore(s,i,n,kind));
-  let keep=ss.map((s,i)=>i).filter(i=>opt.partial || !opt.use.includes(i));
-  const text=ids=>ids.map((i,k)=>k===0?ss[i].replace(CONJ,""):ss[i]).join(" ").trim();
-  const ok=ids=>bodyLines(text(ids))<=3 && len(text(ids))<=LIMITS.p2body;
-  while(keep.length>1 && !ok(keep)){ // drop the sentence that adds least
-    let worst=0; keep.forEach((i,k)=>{ if(sc[i]<sc[keep[worst]]) worst=k; });
-    keep.splice(worst,1);
+/* Description: at least BODY_MIN characters and at most 3 card lines.
+   Every way of combining the sentences (or a shorter form of one: without filler words, or the ending
+   that reads on its own) is tried in reading order, and the one that says the most within 3 lines wins. */
+const BODY_MIN=50;
+const linesMemo=new Map();
+const bodyLinesAt=(t,fs)=>{ const k=fs+"|"+t; let v=linesMemo.get(k); if(v==null){ v=bodyLines(t,fs); if(linesMemo.size>20000) linesMemo.clear(); linesMemo.set(k,v); } return v; };
+function bodyVariants(s){
+  const v=[{t:s,pen:0}];
+  const f=s.replace(FILLER,"$1").replace(/\s+/g," ").trim(); if(f!==s && len(f)>=8) v.push({t:f,pen:0.3});
+  // the ending of a sentence after a clause break ("…듣고, " / "…있는데 "), never after a list comma
+  // ("엽서와 스티커, …") or where it would start with a word pointing back ("그 안에", "그런 물건")
+  const words=s.split(" ");
+  for(let k=1;k<words.length;k++){
+    const p=words[k-1];
+    const brk=/(고|며|서|면|데|지만|니까|도록|게|어|아|해|여)[,，]$/.test(p) || /(는데|지만|니까|면서)$/.test(p);
+    if(!brk || /^(그|이|저|그런|이런|저런|그렇게|이렇게|그래서|그러니|거기|여기)$/.test(words[k])) continue;
+    const tail=words.slice(k).join(" "); if(len(tail)>=15 && len(tail)<len(s)-6) v.push({t:tail,pen:2});
   }
-  let body=text(keep);
-  if(keep.length===1 && !ok(keep)) body=body.replace(FILLER,"$1").replace(/\s+/g," ").trim();
-  return body;
+  return v;
+}
+function pickBody(ss, kind, {skip=[], avoid=[], must=null, max=LIMITS.p2body}={}){
+  const n=ss.length, sc=ss.map((s,i)=>sentScore(s,i,n,kind));
+  const V=ss.map((s,i)=>skip.includes(i)?[]:bodyVariants(s));
+  const text=sel=>sel.map((u,k)=>k===0?u.t.replace(CONJ,""):u.t).join(" ").trim();
+  let best=null;
+  const judge=sel=>{
+    const t=text(sel), L=len(t); if(!L||L>max) return;
+    let shrunk=false;
+    if(L>40 && bodyLinesAt(t,32)>3){ if(bodyLinesAt(t,32*0.9)>3) return; shrunk=true; } // the card shrinks text to 90% at most
+    let s=0;
+    sel.forEach((u,k)=>{ s+=sc[u.i]+1-u.pen; if(avoid.includes(u.i)) s-=4; if(k&&u.i-sel[k-1].i>1) s-=0.3; });
+    s+= L>=BODY_MIN ? 6 : 6*L/BODY_MIN-6;
+    if(shrunk) s-=8; // smaller type only when nothing else reaches BODY_MIN
+    if(must!=null && sel.some(u=>u.i===must)) s+=5;
+    s+=L/40;
+    if(!best||s>best.s) best={s,t};
+  };
+  const rec=(i,sel,L)=>{
+    if(i===n){ if(sel.length) judge(sel); return; }
+    rec(i+1,sel,L);
+    for(const v of V[i]){ const nl=L+len(v.t)+(sel.length?1:0); if(nl>max+4) continue; sel.push({t:v.t,pen:v.pen,i}); rec(i+1,sel,nl); sel.pop(); }
+  };
+  rec(0,[],0);
+  if(best) return best.t;
+  // a single sentence longer than the box: keep its ending, the part that carries the message
+  const one=ss.filter((_,i)=>!skip.includes(i)).map(s=>bodyVariants(s).pop().t).sort((a,b)=>len(a)-len(b))[0]||"";
+  return one;
 }
 function editAnswer(answer, kind, name){
   const ss=sentencesOf(answer);
   if(!ss.length) return {l1:"",l2:"",body:"",cut:false};
-  const best=headOptions(ss,kind,name)[0];
-  if(best) return {l1:best.l1, l2:best.l2, body:buildBody(ss,best,kind), cut:false, partial:!!best.partial};
+  // the headline and the description are chosen together: the best headline that still leaves
+  // enough for a description of BODY_MIN characters or more
+  let pick=null;
+  for(const o of headOptions(ss,kind,name).slice(0,8)){
+    let body=pickBody(ss,kind,{skip:o.use});
+    if(o.partial && len(body)<BODY_MIN){ const b2=pickBody(ss,kind,{avoid:o.use}); if(len(b2)>len(body)) body=b2; } // last resort
+    const ok=len(body)>=BODY_MIN;
+    if(ok){ pick={o,body}; break; }
+    if(!pick||len(body)>len(pick.body)+4) pick={o,body};
+  }
+  if(pick) return {l1:pick.o.l1, l2:pick.o.l2, body:pick.body, cut:false, partial:!!pick.o.partial};
   // nothing fits even as a phrase: fill two lines word by word and flag it for a manual check
   const words=tidyHead(ss[0],name).split(" "); const ls=["",""]; let k=0;
   for(const li of [0,1]) while(k<words.length){ const nx=ls[li]?ls[li]+" "+words[k]:words[k]; if(!fits(nx)) break; ls[li]=nx; k++; }
@@ -1066,11 +1150,11 @@ function aiPrompt(ans){
    - 이 브랜드가 어떤 곳인지 가장 잘 보여 주는 말을 담는다.
    - 브랜드명은 바로 위에 크게 적혀 있으니 핵심 문장에는 넣지 않는다.
 2) 설명 글 (body): 사진 아래쪽 상자에 들어가는 별도의 글.
-   - 띄어쓰기 포함 40~60자(카드에서 3줄 이내), 1~2문장.
+   - 띄어쓰기 포함 50~65자(카드에서 3줄 이내), 1~2문장. 50자보다 짧게 쓰지 않는다.
    - 핵심 문장을 되풀이하지 말고, 원문의 나머지 내용을 자연스럽게 풀어 쓴다. 혼자 읽어도 완결되게 쓴다.
 
 [새해를 준비하는 당신께 페이지] 설명 글(body) 하나만 들어간다.
-   - 띄어쓰기 포함 40~60자(카드에서 3줄 이내), 1~3문장.
+   - 띄어쓰기 포함 50~65자(카드에서 3줄 이내), 1~3문장. 50자보다 짧게 쓰지 않는다.
    - 원문에서 고객에게 전하는 가장 중요한 말(응원·바람·초대)을 중심으로 다듬는다.
 
 공통 규칙: 원문의 표현과 말투(해요체/합니다체)를 최대한 살린다. 원문에 없는 사실, 수치, 약속은 지어내지 않는다. 이모지, 줄바꿈 문자, 따옴표 장식은 쓰지 않는다. 브랜드명은 원문 표기 그대로 쓴다.
@@ -1118,25 +1202,24 @@ function balance(chunk, maxW=HEAD_W){
 function keyBody(answer, kind){
   const ss=sentencesOf(answer); if(!ss.length) return "";
   const n=ss.length, sc=ss.map((s,i)=>sentScore(s,i,n,kind));
-  const order=ss.map((_,i)=>i).sort((a,b)=>sc[b]-sc[a]||a-b);
-  const text=ids=>ids.slice().sort((a,b)=>a-b).map((i,k)=>k===0?ss[i].replace(CONJ,""):ss[i]).join(" ").trim();
-  const ok=ids=>bodyLines(text(ids))<=3 && len(text(ids))<=LIMITS.p3body;
-  const keep=[order[0]];
-  for(const i of order.slice(1)) if(ok([...keep,i])) keep.push(i);
-  const body=text(keep);
-  return ok(keep)?body:body.replace(FILLER,"$1").replace(/\s+/g," ").trim();
+  const key=ss.map((_,i)=>i).sort((a,b)=>sc[b]-sc[a]||a-b)[0];
+  return pickBody(ss,kind,{must:key,max:LIMITS.p3body});
 }
+// a description fits when it has BODY_MIN characters or more and stays within 3 lines (at the 90% size at most)
+const bodyFits=t=>len(t)>=BODY_MIN && bodyLinesAt(t,32*0.9)<=3 && len(t)<=LIMITS.p2body;
 function generateFrom(b, ai, aiTried){
   let i=editAnswer(b.intro||"","intro",b.name), n=keyBody(b.newyear||"","newyear"), nAi=false;
   if(ai){
-    i=b.intro?cleanAi(ai.intro,i):i;
+    const ia=b.intro?cleanAi(ai.intro,i):i;
+    if(ia.ai && (bodyFits(ia.body) || !bodyFits(i.body))) i=ia; // Claude's version is kept when its description is long enough
     const nb=String(ai.newyear&&ai.newyear.body||"").replace(/\s+/g," ").replace(/^["'“”‘’]+|["'“”‘’]+$/g,"").trim();
-    if(b.newyear && nb){ n=nb; nAi=true; }
+    if(b.newyear && nb && (bodyFits(nb) || !bodyFits(n))){ n=nb; nAi=true; }
   }
   Object.assign(b,{p2l1:i.l1,p2l2:i.l2,p2body:i.body,p3l1:"",p3l2:"",p3body:n});
   b.mode={v:2, ai:!!(i.ai||nAi), noAi:aiTried===false,
     cut:[i.cut&&"브랜드 소개"].filter(Boolean),
-    partial:[!i.ai&&i.partial&&"브랜드 소개"].filter(Boolean)};
+    partial:[!i.ai&&i.partial&&"브랜드 소개"].filter(Boolean),
+    short:[b.intro&&len(i.body)<BODY_MIN&&"브랜드 소개", b.newyear&&len(n)<BODY_MIN&&"새해 인사"].filter(Boolean)};
 }
 /* Older saves kept one pasted answer block; move it into the separate fields once. */
 function migrate(b){
@@ -1155,7 +1238,9 @@ function showNote(){
   const extra=[
     md.cut.length?`${md.cut.join(", ")}: 문장이 길어서 핵심 문장이 중간에 끊겼어요.`:"",
     md.partial.length?`${md.partial.join(", ")}: 긴 문장의 끝부분을 핵심 문장으로 뽑았어요.`:"",
+    (md.short||[]).length?`${md.short.join(", ")}: 원문이 짧아서 설명 글이 ${BODY_MIN}자보다 짧아요. 조금 보충해 주세요.`:"",
   ].filter(Boolean).join(" ");
+  if(extra) box.className="msg warn";
   box.textContent=(md.ai?"Claude가 핵심 문장 2줄과 설명 글을 새로 다듬었어요. 원문과 다른 곳이 없는지 확인해 주세요."
     :"원문에서 핵심 메시지를 골라 2줄로 정리하고, 나머지 문장으로 설명 글을 만들었어요. 3페이지에는 가장 중요한 문장이 들어가요."+(md.noAi?" 이 화면에선 Claude 연결이 없어 원문 표현을 그대로 써요.":""))
     +(extra?" "+extra+" ‘문구 다듬기’에서 고칠 수 있어요.":"");
