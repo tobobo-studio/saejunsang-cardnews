@@ -172,6 +172,7 @@ details.sec>.stack{margin:4px 0 12px}
 .blist .st:empty{display:none}
 .blist .st.ok{background:var(--green-weak);color:var(--green-t)}
 .blist .st.sent{background:var(--primary-weak);color:var(--primary-weak-t)}
+.blist .st.rev{background:var(--orange-weak);color:var(--orange-t)}
 #statusInfo{margin-top:-2px}
 .mailview{display:flex;flex-direction:column;gap:16px}
 .mailhead{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px}
@@ -197,6 +198,11 @@ details.sec>.stack{margin:4px 0 12px}
 .sheet{width:min(100%,520px);background:var(--surface);color:var(--t1);border-radius:24px 24px 0 0;display:flex;flex-direction:column;gap:14px;
   padding-block:20px calc(20px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));box-shadow:0 -8px 24px rgba(0,0,0,.12)}
 .sheet h3{margin:0;font-size:18px;line-height:26px;font-weight:700}
+/* 질문지 수정 링크 창: centred on wide screens */
+@media (min-width:700px){.sheetBack.mid{align-items:center}.sheetBack.mid .sheet{border-radius:24px;max-height:calc(100vh - 48px);overflow:auto}}
+.linkrow{display:flex;gap:8px}.linkrow input{flex:1;min-width:0;font-size:14px}
+.sheet textarea{min-height:220px;font-size:14px;line-height:1.6}
+.sheet .lbl2{font-size:13px;font-weight:600;color:var(--t3);margin:0 0 -8px}
 .sheetImgs{display:grid;gap:8px}
 .sheetImgs figure{margin:0;position:relative;min-width:0}
 .sheetImgs img{display:block;width:100%;max-width:100%;aspect-ratio:1080/1350;object-fit:cover;border-radius:10px;background:var(--fill)}
@@ -403,6 +409,8 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
       <div class="finalbar">
         <button class="btn primary big block" id="confirmBtn" type="button">메일 보내기</button>
         <p class="hint" id="confirmHint">누르면 이 카드뉴스를 최종 컨펌 완료로 표시하고, 메일 보내는 화면으로 넘어가요.</p>
+        <button class="btn block" id="editLinkBtn" type="button">질문지 수정폼 전달</button>
+        <p class="hint" id="editLinkHint">브랜드가 보낸 질문지를 직접 고칠 수 있는 링크를 보내요.</p>
       </div>
     </section>
   </div>
@@ -639,13 +647,27 @@ async function flush(){
       try{
         if(!b._remote){ await insertRow(b); renderList(); continue; }
         const d=dataOf(b), js=JSON.stringify(d); if(js===b._saved) continue;
-        const [r]=await sb(`/rest/v1/brands?id=eq.${b.id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({data:d,updated_at:new Date().toISOString()})});
+        // only if the brand hasn't sent an edited questionnaire since this copy was loaded
+        const same=b.revisedAt?`eq.${encodeURIComponent(b.revisedAt)}`:"is.null";
+        const [r]=await sb(`/rest/v1/brands?id=eq.${b.id}&data->>revisedAt=${same}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({data:d,updated_at:new Date().toISOString()})});
         if(r){ b._saved=js; b._at=r.updated_at; }
+        else await takeRevision(b);
       }catch(e){ console.error(e); dirty.add(b); setSync("error"); return; }
     }
     setSync("ok");
   })();
   try{ await flushing; } finally{ flushing=null; }
+}
+/* The brand's edited questionnaire wins over this screen's copy: load it, rebuild the card text, tell the team. */
+async function takeRevision(b){
+  const [row]=await sb(`/rest/v1/brands?select=id,seq,ord,data,updated_at&id=eq.${b.id}`);
+  if(!row||!row.data.revisedAt||row.data.revisedAt===b.revisedAt) return; // deleted, or nothing new
+  const fresh=fromRow(row); for(const k of Object.keys(b)) delete b[k]; Object.assign(b,fresh);
+  if(autoGenerate([b])) setTimeout(flush,0);
+  toast(`질문지 수정본이 들어왔어요: ${(b.name||"").trim()} · 새 답변과 사진으로 카드를 다시 만들었어요`);
+  if(b===cur()){ render(pageSet,b,current+1); fillEditor(); showChecks(); }
+  if(sortBrands()) saveOrder();
+  renderList();
 }
 async function saveOrder(){
   if(!shared) return persist();
@@ -677,14 +699,15 @@ async function pull(){
   if(!shared||document.hidden||flushing) return;
   let rows; try{ rows=await fetchRows(); }catch(e){ setSync("error"); return; }
   const mine=new Map(brands.filter(b=>b._remote).map(b=>[b.id,b]));
-  const curB=cur(); let curChanged=false, listChanged=false; const next=[], arrived=[];
+  const curB=cur(); let curChanged=false, listChanged=false; const next=[], arrived=[], revised=[];
   for(const r of rows){
     let b=mine.get(r.id);
     if(!b){ const nb=fromRow(r); next.push(nb); arrived.push(nb); listChanged=true; continue; }
     mine.delete(r.id);
     const js=JSON.stringify(r.data);
     if(js!==b._saved && !dirty.has(b) && r.updated_at!==b._at){
-      const fresh=fromRow(r); for(const k of Object.keys(b)) delete b[k]; Object.assign(b,fresh);
+      const fresh=fromRow(r); if(fresh.revisedAt&&fresh.revisedAt!==b.revisedAt) revised.push(b);
+      for(const k of Object.keys(b)) delete b[k]; Object.assign(b,fresh);
       listChanged=true; if(b===curB) curChanged=true;
     }
     if(b._ord!==r.ord){ b._ord=r.ord; listChanged=true; }
@@ -693,8 +716,9 @@ async function pull(){
   if(mine.size) listChanged=true; // removed by someone else
   if(!listChanged){ setSync("ok"); return; }
   const forms=arrived.filter(b=>b.fromForm);
-  if(autoGenerate(arrived)) flush();
-  if(forms.length) toast(`질문지 ${forms.length}건이 새로 들어왔어요: ${forms.map(b=>(b.name||"").trim()).filter(Boolean).join(", ")}`);
+  if(autoGenerate(arrived.concat(revised))) flush();
+  if(revised.length) toast(`질문지 수정본이 들어왔어요: ${revised.map(b=>(b.name||"").trim()).filter(Boolean).join(", ")} · 새 답변과 사진으로 카드를 다시 만들었어요`);
+  else if(forms.length) toast(`질문지 ${forms.length}건이 새로 들어왔어요: ${forms.map(b=>(b.name||"").trim()).filter(Boolean).join(", ")}`);
   brands=next.concat(brands.filter(b=>!b._remote)); if(sortBrands()) saveOrder();
   if(!brands.length) brands=[SAMPLE()];
   const idx=brands.indexOf(curB);
@@ -1365,7 +1389,7 @@ function fillEditor(){
     const p=b.photos[i]; t.classList.toggle("has",!!p.src); t.style.backgroundImage=p.src?`url("${p.src}")`:"";
   });
   showNote();
-  const si=$("#statusInfo"); const sl=statusLine(b); si.textContent=sl; si.hidden=!sl;
+  const si=$("#statusInfo"); const sl=statusLine(b); si.textContent=sl; si.hidden=!sl; editLinkHint(b);
   const fi=$("#formInfo");
   if(b.fromForm){
     const d=b.submittedAt?new Date(b.submittedAt):null;
@@ -1415,6 +1439,7 @@ function showChecks(){
   const cb=$("#confirmBtn"), sent=!!(b.mail&&b.mail.sentAt); cb.disabled=!!errs;
   cb.textContent=sent?"메일 다시 보내기":"메일 보내기";
   $("#confirmHint").textContent=errs?"칸을 넘는 글을 고치면 보낼 수 있어요."
+    :sent&&revisedLater(b)?`${fmtDate(b.revisedAt)}에 질문지 수정본이 들어왔어요. 바뀐 카드를 확인하고 다시 보내 주세요.`
     :sent?`${fmtDate(b.mail.sentAt)}에 ${b.mail.to}로 보냈어요. 누르면 메일 화면으로 넘어가요.`
     :b.confirmedAt?`최종 컨펌 ${fmtDate(b.confirmedAt)} · 누르면 메일 보내는 화면으로 넘어가요.`
     :"누르면 이 카드뉴스를 최종 컨펌 완료로 표시하고, 메일 보내는 화면으로 넘어가요.";
@@ -1482,7 +1507,9 @@ function move(i,d){
   sortBrands(); select(current); saveOrder();
 }
 /* Brands whose mail has gone out always sit at the bottom of the list (in the order they were sent). */
-const isSent=b=>!!(b.mail&&b.mail.sentAt);
+// a brand that sent an edited questionnaire after its mail went out needs the new cards: back to 미발송
+const revisedLater=b=>!!(b.revisedAt&&!(b.mail&&b.mail.sentAt&&b.mail.sentAt>b.revisedAt));
+const isSent=b=>!!(b.mail&&b.mail.sentAt)&&!revisedLater(b);
 function sortBrands(){
   const cb=brands[current];
   const next=brands.filter(b=>!isSent(b)).concat(brands.filter(isSent).sort((a,b)=>String(a.mail.sentAt).localeCompare(String(b.mail.sentAt))));
@@ -1893,6 +1920,7 @@ $("#exportAll").addEventListener("click",async()=>{
 const EMAIL_RE=/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const fmtDate=iso=>{ const d=new Date(iso); return isNaN(d)?"":`${d.getMonth()+1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
 function mailState(b){
+  if(revisedLater(b)) return {label:"수정본 도착",cls:"rev"};
   if(b.mail&&b.mail.sentAt) return {label:"발송완료",cls:"sent"};
   if(b.confirmedAt) return {label:"컨펌완료",cls:"ok"};
   return {label:"",cls:""};
@@ -1901,6 +1929,7 @@ function statusLine(b){
   const parts=[];
   if(b.confirmedAt) parts.push(`최종 컨펌 ${fmtDate(b.confirmedAt)}`);
   if(b.mail&&b.mail.sentAt) parts.push(`메일 발송 ${fmtDate(b.mail.sentAt)} → ${b.mail.to}`);
+  if(b.revisedAt) parts.push(`질문지 수정본 ${fmtDate(b.revisedAt)}`+(revisedLater(b)&&b.mail&&b.mail.sentAt?" · 바뀐 카드로 다시 보내 주세요":""));
   return parts.join(" · ");
 }
 $("#confirmBtn").addEventListener("click",()=>{
@@ -1913,6 +1942,86 @@ $("#confirmBtn").addEventListener("click",()=>{
   }
   location.hash="mail-"+b.id;
 });
+
+/* ---------- 질문지 수정폼 전달 ----------
+   One link for every brand (the questionnaire with #edit): the brand types the brand name and email it used,
+   its own questionnaire opens with the answers and photos filled in, and sending it updates that same brand. */
+const EDIT_URL="https://heeheeworks.github.io/newyear-questionnaire/#edit";
+function editLinkHint(b){
+  const h=$("#editLinkHint"); if(!h) return;
+  h.textContent=b.editSentAt?`수정 링크를 보냈어요 · ${fmtDate(b.editSentAt)} → ${b.editSentTo}`+(b.revisedAt&&b.revisedAt>b.editSentAt?` · 수정본 도착 ${fmtDate(b.revisedAt)}`:"")
+    :"브랜드가 보낸 질문지를 직접 고칠 수 있는 링크를 보내요.";
+}
+function editMailText(b,link){
+  const nm=(b.name||"").trim()||"브랜드";
+  return {subject:`〈새해준비상점 N.27〉 ${nm} 질문지 수정 링크를 보내드려요`,
+    body:`안녕하세요, ${nm} 담당자님.
+${SENDER}입니다.
+
+보내 주신 질문지를 고칠 수 있는 링크를 보내드려요.
+링크를 열고 질문지에 적어 주신 브랜드 이름과 이메일을 넣으면, 처음에 보내 주신 답변과 사진이 그대로 열려요.
+바꾸고 싶은 부분만 고친 뒤 ‘수정한 질문지 보내기’를 눌러 주세요. 사진은 바꿀 사진만 다시 골라 주시면 돼요.
+
+${link}
+· 브랜드 이름: ${nm}
+· 이메일: ${(b.email||"").trim()}
+
+고쳐 주신 내용으로 카드뉴스를 다시 만들어 보내드릴게요.
+고맙습니다.
+
+${SENDER} 드림`};
+}
+$("#editLinkBtn").addEventListener("click",()=>{
+  const b=cur();
+  if(b.sample){ toast("예시 브랜드예요. 목록에서 브랜드를 골라 주세요."); return; }
+  openEditSheet(b);
+});
+function openEditSheet(b){
+  $("#editSheet")?.remove();
+  const link=EDIT_URL, t=editMailText(b,link), nm=(b.name||"").trim(), em=(b.email||"").trim();
+  const back=el("div","sheetBack mid",document.body); back.id="editSheet";
+  const sh=el("div","sheet",back); sh.setAttribute("role","dialog"); sh.setAttribute("aria-modal","true"); sh.setAttribute("aria-labelledby","editTitle");
+  const h=el("h3","",sh); h.id="editTitle"; h.textContent=`‘${(b.name||"").trim()||"이 브랜드"}’ 질문지 수정폼`;
+  el("p","hint",sh).textContent="모든 브랜드가 함께 쓰는 수정 링크예요. 질문지에 적은 브랜드 이름과 이메일을 넣으면 자기 질문지가 답변과 사진이 채워진 채로 열려요. 고쳐서 보내면 카드뉴스가 새 내용으로 바뀌고 목록에 ‘수정본 도착’이 떠요. 바뀐 카드는 메일로 다시 보내 주세요.";
+  const who=el("p","msg "+(em&&nm?"ok":"err"),sh);
+  who.textContent=em&&nm?`이 브랜드는 브랜드 이름 ‘${nm}’, 이메일 ${em}로 찾을 수 있어요.`:"이 브랜드는 브랜드명이나 이메일이 비어 있어서 수정 링크에서 찾을 수 없어요. 위쪽 칸에 먼저 적어 주세요.";
+  const row=el("div","linkrow",sh); const li=el("input","",row); li.type="text"; li.readOnly=true; li.value=link; li.setAttribute("aria-label","질문지 수정 링크");
+  const cp=el("button","btn",row); cp.type="button"; cp.textContent="링크 복사";
+  cp.addEventListener("click",async()=>{
+    try{ await navigator.clipboard.writeText(link); toast("수정 링크를 복사했어요."); }
+    catch(_){ li.focus(); li.select(); toast("링크를 길게 눌러 복사해 주세요."); }
+  });
+  el("p","lbl2",sh).textContent="메일로 보내기";
+  const to=el("input","",sh); to.type="text"; to.inputMode="email"; to.value=(b.email||"").trim(); to.placeholder="받는 사람 이메일"; to.setAttribute("aria-label","받는 사람");
+  const sj=el("input","",sh); sj.type="text"; sj.value=t.subject; sj.setAttribute("aria-label","메일 제목");
+  const bd=el("textarea","",sh); bd.value=t.body; bd.setAttribute("aria-label","메일 내용");
+  const res=el("p","msg",sh); res.setAttribute("role","status");
+  const go=el("button","btn primary block big",sh); go.type="button"; go.textContent=b.editSentAt?"수정 링크 다시 보내기":"수정 링크 메일 보내기";
+  const close=el("button","btn block",sh); close.type="button"; close.textContent="닫기";
+  const done=()=>back.remove();
+  close.addEventListener("click",done);
+  back.addEventListener("click",e=>{ if(e.target===back) done(); });
+  back.addEventListener("keydown",e=>{ if(e.key==="Escape") done(); });
+  go.addEventListener("click",async()=>{
+    const v={to:to.value.trim(),subject:sj.value.trim(),body:bd.value.trim()};
+    if(!EMAIL_RE.test(v.to)){ res.className="msg err"; res.textContent="받는 사람 이메일을 확인해 주세요."; to.focus(); return; }
+    if(!v.subject.startsWith("〈새해준비상점 N.27〉")){ res.className="msg err"; res.textContent="제목은 〈새해준비상점 N.27〉로 시작해야 보낼 수 있어요."; sj.focus(); return; }
+    if(!v.body.includes(link)){ res.className="msg err"; res.textContent="메일 내용에 수정 링크가 빠졌어요. 링크를 다시 넣어 주세요."; bd.focus(); return; }
+    go.disabled=true; go.textContent="보내는 중…"; res.className="msg"; res.textContent="";
+    try{
+      await sendViaScript(v,[]);
+      Object.assign(b,{editSentAt:new Date().toISOString(),editSentTo:v.to});
+      if(b===cur()) changed(); else { dirty.add(b); flush(); }
+      res.className="msg ok"; res.textContent=`${v.to}로 수정 링크를 보냈어요.`; toast("수정 링크를 보냈어요.");
+      go.textContent="수정 링크 다시 보내기";
+    }catch(e){
+      console.error(e); res.className="msg err";
+      res.textContent=SCRIPT_ERR[e.message]||"메일을 보내지 못했어요. 잠시 뒤 다시 눌러 주세요. 급하면 ‘링크 복사’로 직접 보내 주세요.";
+      go.textContent=b.editSentAt?"수정 링크 다시 보내기":"수정 링크 메일 보내기";
+    }finally{ go.disabled=false; }
+  });
+  (b.email?go:to).focus();
+}
 
 /* The mail page is its own screen (#mail-<brand id>), so it can't be mixed up with editing. */
 const MAIL_TPL_KEY="sjs-mail-template-v4", OLD_TPL_KEY="sjs-mail-template-v3", CLIENT_KEY="sjs-gmail-client";
@@ -2096,7 +2205,7 @@ let mailFromP=null;
 function scriptInfo(){ if(!mailFromP) mailFromP=fetch(MAIL_ENDPOINT).then(r=>r.json()).catch(()=>{ mailFromP=null; return {}; }); return mailFromP; }
 function scriptFrom(){ return scriptInfo().then(j=>j.from||""); }
 async function sendViaScript(v,files){
-  const html=`<div style="font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:15px;line-height:1.7;color:#191f28">${escHtml(v.body).replace(/\n/g,"<br>")}</div>`;
+  const html=`<div style="font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:15px;line-height:1.7;color:#191f28">${escHtml(v.body).replace(/https:\/\/[^\s<]+/g,u=>`<a href="${u}" style="color:#3182f6">${u}</a>`).replace(/\n/g,"<br>")}</div>`;
   const enc=async f=>({name:f.name,type:f.type,data:u8b64(new Uint8Array(await f.arrayBuffer()))});
   const payload={kind:"sjs-cardnews",to:v.to,subject:v.subject,body:v.body,html,files:await Promise.all(files.map(enc))};
   const r=await fetch(MAIL_ENDPOINT,{method:"POST",body:JSON.stringify(payload)});
@@ -2124,7 +2233,7 @@ $("#m-send").addEventListener("click",async()=>{
     const v=mailInputs(); if(!v) return;
     if(mail.files.length!==ALL_PAGES.length){ toast("이미지를 아직 만드는 중이에요. 잠시 뒤에 눌러 주세요."); return; }
     const btn=$("#m-send");
-    if(b.mail&&b.mail.sentAt&&btn.dataset.again!=="1"){ btn.dataset.again="1"; btn.textContent="이미 보낸 브랜드예요 · 한 번 더 누르면 다시 보내요"; setTimeout(()=>{ btn.dataset.again=""; btn.textContent="메일 보내기"; },4000); return; }
+    if(isSent(b)&&btn.dataset.again!=="1"){ btn.dataset.again="1"; btn.textContent="이미 보낸 브랜드예요 · 한 번 더 누르면 다시 보내요"; setTimeout(()=>{ btn.dataset.again=""; btn.textContent="메일 보내기"; },4000); return; }
     btn.dataset.again=""; btn.disabled=true; btn.textContent="보내는 중…"; res.className="msg"; res.textContent="";
     try{
       if(((await scriptInfo()).maxFiles||3)<mail.files.length){ mailFromP=null; throw new Error("too_many_files"); } // never send with a card missing
@@ -2205,7 +2314,7 @@ function toast(t){ let n=$(".toast"); if(!n){ n=el("div","toast",document.body);
    GitHub Pages lets browsers keep a page for up to 10 minutes. On opening, the page asks for version.json
    past every cache and, when a newer build is up, reloads itself once at "?v=<build>" (a URL no cache has).
    While someone is working it only offers the reload, after saving what is pending. */
-const BUILD="20261103-225918", BUILD_KIND="maker";
+const BUILD="20261109-223031", BUILD_KIND="maker";
 async function latestBuild(){
   if(!/github\.io$/.test(location.hostname)) return null;
   try{ const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"}); if(!r.ok) return null; return (await r.json())[BUILD_KIND]||null; }catch(_){ return null; }

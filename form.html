@@ -117,6 +117,9 @@ input[type=text]:focus,input[type=email]:focus,select:focus,textarea:focus{outli
 .done .mark img{width:36px;height:auto;display:block}
 .done h2{margin:0;font-size:24px;line-height:1.35;font-weight:800;text-wrap:balance}
 .done p{margin:0;color:var(--ink-2)}
+.find{display:flex;flex-direction:column;gap:14px}
+.find h2{margin:0}
+.find .send{margin-top:4px}
 .foot{margin-top:28px;font-size:13px;color:var(--muted);text-align:center}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media (min-width:600px){h1{font-size:34px}.card{padding:26px 26px 28px}}
@@ -134,6 +137,21 @@ input[type=text]:focus,input[type=email]:focus,select:focus,textarea:focus{outli
   </header>
 
   <p class="notice" id="sentBefore" hidden></p>
+
+  <form class="card find" id="findForm" hidden novalidate aria-labelledby="h-find">
+    <h2 id="h-find">보낸 질문지 찾기</h2>
+    <p class="help">질문지를 보낼 때 적은 브랜드 이름과 이메일을 넣어 주세요. 보내 주신 답변과 사진이 그대로 열려요.</p>
+    <div class="field" data-k="fname">
+      <label class="label" for="find-name"><span>브랜드 이름</span></label>
+      <input type="text" id="find-name" maxlength="40" autocomplete="organization" placeholder="예: 히히웍스">
+    </div>
+    <div class="field" data-k="femail">
+      <label class="label" for="find-email"><span>질문지에 적은 이메일</span></label>
+      <input type="email" id="find-email" maxlength="80" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" placeholder="brand@example.com">
+    </div>
+    <p class="err" id="err-find" role="alert"></p>
+    <button class="send" type="submit" id="findBtn">질문지 불러오기</button>
+  </form>
 
   <form id="qform" novalidate>
     <section class="card" aria-labelledby="h-info">
@@ -224,6 +242,9 @@ const PHOTOS=[
 const SB_URL="https://owbaibkldgtixaskuvhd.supabase.co";
 const SB_KEY="sb_publishable_dBC439I0iaObf88_Kk2kNA_CQsgjKpC";
 const DRAFT_KEY="sjs-brand-q-draft", SENT_KEY="sjs-brand-q-sent";
+/* …/#edit: the shared link for changing a questionnaire that was already sent */
+const EDIT=/^#edit\b/.test(location.hash)||new URLSearchParams(location.search).has("edit");
+let editRow=null; // {id,data} of the brand being edited
 const $=s=>document.querySelector(s);
 const len=s=>[...(s||"")].length;
 
@@ -300,9 +321,11 @@ function needLine(k){
 }
 function flag(k,on){ flagged[k]=on; needLine(k); }
 function saveDraft(){
+  if(EDIT) return;
   try{ const d={section:sel.value}; TEXT.forEach(k=>d[k]=$("#q-"+k).value); localStorage.setItem(DRAFT_KEY,JSON.stringify(d)); }catch(_){}
 }
 function loadDraft(){
+  if(EDIT) return;
   try{ const d=JSON.parse(localStorage.getItem(DRAFT_KEY)||"null"); if(!d) return; TEXT.forEach(k=>{ if(d[k]) $("#q-"+k).value=d[k]; }); if(d.section!=null) sel.value=d.section; }catch(_){}
 }
 TEXT.forEach(k=>$("#q-"+k).addEventListener("input",()=>{ if(!STORY[k]) clearErr(k); count(k); saveDraft(); }));
@@ -390,6 +413,7 @@ $("#qform").addEventListener("submit",async e=>{
   const btn=$("#send"), prog=$("#progress");
   btn.disabled=true; btn.textContent="보내는 중…";
   try{
+    if(EDIT){ await sendEdit(prog); return; }
     // one questionnaire per brand: an email that has already sent one can't send again
     const email=$("#q-email").value.replace(/\s+/g,"").toLowerCase();
     let dup=false;
@@ -415,11 +439,95 @@ $("#qform").addEventListener("submit",async e=>{
     showDone(false);
   }catch(err){
     console.error(err);
-    $("#err-send").textContent="보내는 중에 문제가 생겼어요. 인터넷 연결을 확인하고 ‘질문지 보내기’를 다시 눌러 주세요. 이미 올라간 사진은 다시 올리지 않아요.";
+    $("#err-send").textContent=err&&err.message==="gone"?"질문지를 다시 찾지 못했어요. 페이지를 새로고침해서 브랜드 이름과 이메일로 다시 불러와 주세요."
+      :`보내는 중에 문제가 생겼어요. 인터넷 연결을 확인하고 ‘${EDIT?"수정한 질문지 보내기":"질문지 보내기"}’를 다시 눌러 주세요. 이미 올라간 사진은 다시 올리지 않아요.`;
   }finally{
-    btn.disabled=false; btn.textContent="질문지 보내기"; prog.textContent="";
+    btn.disabled=false; btn.textContent=EDIT?"수정한 질문지 보내기":"질문지 보내기"; prog.textContent="";
   }
 });
+/* ---------- edit mode ---------- */
+const normName=t=>(t||"").normalize("NFC").toLowerCase().replace(/[\s\u00a0·.,'"’‘“”()\[\]\-_/]+/g,"");
+const normMail=t=>(t||"").replace(/\s+/g,"").toLowerCase();
+function enterEdit(){
+  document.title="새해준비상점 입점 브랜드 질문지 수정";
+  $(".hero h1").textContent="입점 브랜드 질문지 수정";
+  $(".lead").textContent="이미 보내 주신 질문지를 고치는 곳이에요. 브랜드 이름과 이메일로 질문지를 불러온 뒤, 바꾸고 싶은 부분만 고쳐서 다시 보내 주세요. 고친 내용으로 소개 콘텐츠를 다시 만들어 드릴게요.";
+  $(".facts").innerHTML="<li>보내 주신 답변이 그대로 열려요</li><li>사진은 바꿀 것만 다시 골라 주세요</li>";
+  $("#send").textContent="수정한 질문지 보내기";
+  $("#qform").hidden=true; $("#findForm").hidden=false;
+  let s=null; try{ s=JSON.parse(localStorage.getItem(SENT_KEY)||"null"); }catch(_){} // this device sent one: fill it in
+  if(s){ $("#find-name").value=s.name||""; $("#find-email").value=s.email||""; }
+}
+$("#findForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const nm=$("#find-name").value.trim(), em=normMail($("#find-email").value), err=$("#err-find"), btn=$("#findBtn");
+  err.textContent="";
+  if(!nm||!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)){ err.textContent="브랜드 이름과 이메일을 모두 적어 주세요."; (nm?$("#find-email"):$("#find-name")).focus(); return; }
+  btn.disabled=true; btn.textContent="찾는 중…";
+  try{
+    const r=await sb(`/rest/v1/brands?select=id,data&data->>email=ilike.${encodeURIComponent(em)}`);
+    const row=(await r.json()).find(x=>normMail(x.data&&x.data.email)===em&&normName(x.data.name)===normName(nm));
+    if(!row){ err.textContent="이 브랜드 이름과 이메일로 보낸 질문지를 찾지 못했어요. 질문지에 적었던 그대로 넣어 주세요. 그래도 안 되면 담당자에게 알려 주세요."; return; }
+    openForEdit(row);
+  }catch(_){ err.textContent="질문지를 불러오지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요."; }
+  finally{ btn.disabled=false; btn.textContent="질문지 불러오기"; }
+});
+function openForEdit(row){
+  editRow=row; const d=row.data||{};
+  ["name","email","hook","intro","newyear"].forEach(k=>{ $("#q-"+k).value=d[k]||""; });
+  sel.value=d.sectionUnsure?"unknown":(d.section!=null&&d.section!==""?String(d.section):"");
+  (d.photos||[]).slice(0,3).forEach((p,i)=>{ if(p&&p.src) showSentPhoto(i,p); });
+  $("#q-agree").checked=true;
+  $("#findForm").hidden=true; $("#qform").hidden=false;
+  const note=$("#sentBefore"); note.textContent=`‘${d.name||""}’ 질문지를 불러왔어요. 바꾸고 싶은 부분만 고친 뒤 맨 아래 ‘수정한 질문지 보내기’를 눌러 주세요.`; note.hidden=false;
+  TEXT.forEach(count); layoutMirrors();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+// a photo the brand already sent: shown as picked, sent again only if it's replaced
+function showSentPhoto(i,p){
+  const row=box.children[i];
+  photos[i]={sent:p,w:p.w,h:p.h,preview:p.src}; uploaded[i]=Object.assign({sent:true},p);
+  row.classList.add("has"); row.classList.remove("bad");
+  row.querySelector(".thumb").style.backgroundImage=`url("${p.src}")`;
+  row.querySelector(".pick").textContent="다른 사진으로 바꾸기";
+  const st=row.querySelector(".state"); st.className="state"; st.textContent="보내 주신 사진이에요. 바꾸려면 다른 사진을 골라 주세요.";
+}
+async function sendEdit(prog){
+  if(!editRow) throw new Error("gone");
+  for(let i=0;i<3;i++){
+    if(uploaded[i]) continue;
+    prog.textContent=`바꾼 사진을 올리는 중이에요 (${i+1}/3)`;
+    const path=`form/${batch}/${i+1}-${Date.now()}.jpg`;
+    await sb(`/storage/v1/object/photos/${path}`,{method:"POST",headers:{"content-type":"image/jpeg"},body:photos[i].blob});
+    uploaded[i]={src:`${SB_URL}/storage/v1/object/public/photos/${path}`,path,w:photos[i].w,h:photos[i].h};
+  }
+  prog.textContent="수정한 답변을 보내는 중이에요";
+  // newest copy of the brand: keeps what the team changed meanwhile (crop, card text tweaks)
+  const row=(await (await sb(`/rest/v1/brands?select=id,data&id=eq.${editRow.id}`)).json())[0];
+  if(!row) throw new Error("gone");
+  const cur=row.data||{}, now=new Date().toISOString();
+  const v=k=>$("#q-"+k).value.replace(/\s+/g," ").trim();
+  const ans={name:v("name"), email:normMail($("#q-email").value), section:sel.value==="unknown"?0:+sel.value, sectionUnsure:sel.value==="unknown",
+    hook:tidy($("#q-hook").value), intro:tidy($("#q-intro").value), newyear:tidy($("#q-newyear").value)};
+  const old=cur.photos||[];
+  const pics=[0,1,2].map(i=>{ const u=uploaded[i];
+    if(u.sent) return old[i]&&old[i].src?old[i]:{src:u.src,path:u.path,w:u.w,h:u.h,scale:u.scale??1,x:u.x??0,y:u.y??0,rot:u.rot??0}; // kept, with the team's crop
+    return {src:u.src,path:u.path,w:u.w,h:u.h,scale:1,x:0,y:0,rot:0}; });
+  const data=Object.assign({},cur,ans,{photos:pics,fromForm:true,revisedAt:now,revisions:(cur.revisions||0)+1});
+  // changed answers: the generator writes the card text again from them (as for a new questionnaire)
+  if(["hook","intro","newyear"].some(k=>(cur[k]||"")!==ans[k])) data.autoGen=false;
+  const r=await sb(`/rest/v1/brands?id=eq.${row.id}`,{method:"PATCH",headers:{"content-type":"application/json",Prefer:"return=representation"},body:JSON.stringify({data,updated_at:now})});
+  if(!(await r.json()).length) throw new Error("gone");
+  editRow={id:row.id,data};
+  for(let i=0;i<3;i++) if(!uploaded[i].sent) showSentPhoto(i,pics[i]); // another edit starts from what was just sent
+  try{ localStorage.setItem(SENT_KEY,JSON.stringify({name:data.name,email:data.email,at:data.submittedAt||now})); }catch(_){}
+  $("#doneTitle").textContent="수정한 질문지를 잘 받았어요";
+  $("#doneText").textContent="고쳐 주신 내용으로 소개 콘텐츠를 다시 준비할게요. 또 고칠 곳이 생기면 같은 링크에서 다시 보내 주셔도 돼요.";
+  $("#qform").hidden=true; $("#sentBefore").hidden=true; $("#done").hidden=false;
+  document.querySelectorAll(".lead,.facts").forEach(x=>x.hidden=true);
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
 /* After sending, the form is gone for good on this device: one questionnaire per brand. */
 function showDone(already, name){
   if(already){
@@ -433,7 +541,7 @@ function showDone(already, name){
 
 /* always the newest version: browsers may keep this page for up to 10 minutes, so on opening it checks
    version.json past every cache and, if a newer build is up, reloads once at "?v=<build>" (drafts are kept) */
-const BUILD="20261103-225918";
+const BUILD="20261109-223031";
 (async()=>{
   if(!/github\.io$/.test(location.hostname)) return;
   try{
@@ -450,7 +558,9 @@ if(document.fonts&&document.fonts.ready) document.fonts.ready.then(layoutMirrors
 if(document.fonts&&document.fonts.addEventListener) document.fonts.addEventListener("loadingdone",()=>Object.keys(STORY).forEach(count));
 /* A device that already sent shows the thank-you screen. If the team has since cleared that answer
    (it is no longer in the list), the device forgets it and the questionnaire opens again. */
+if(EDIT) enterEdit();
 (async()=>{
+  if(EDIT) return;
   let s=null; try{ s=JSON.parse(localStorage.getItem(SENT_KEY)||"null"); }catch(_){}
   if(!s||!s.name) return;
   showDone(true,s.name);
