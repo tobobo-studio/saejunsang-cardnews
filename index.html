@@ -444,6 +444,7 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
     <div class="mailgrid">
       <div class="panel stack">
         <h2>메일 내용</h2>
+        <p class="hint" id="mailKind"></p>
         <div class="field" data-m="to">
           <label for="m-to">받는 사람</label>
           <input type="text" inputmode="email" id="m-to" maxlength="80" autocomplete="off" spellcheck="false" placeholder="brand@example.com">
@@ -461,7 +462,8 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
           <button class="btn sm" id="m-reset" type="button">기본 문구로 되돌리기</button>
           <button class="btn sm" id="m-saveTpl" type="button">이 문구를 기본으로 저장</button>
         </div>
-        <p class="hint">기본으로 저장하면 다른 브랜드에도 같은 문구가 들어가요. 브랜드 이름은 자동으로 바뀌어요.</p>
+        <button class="btn sm block" id="m-switchTpl" type="button">재발송 문구로 바꾸기</button>
+        <p class="hint">처음 보내는 브랜드에는 처음 발송 문구가, 이미 보낸 브랜드에는 재발송 문구가 들어가요. 기본으로 저장하면 지금 문구 종류의 기본이 바뀌고, 브랜드 이름은 자동으로 바뀌어요.</p>
       </div>
       <div class="panel stack">
         <h2>첨부 이미지 4장</h2>
@@ -2135,43 +2137,58 @@ function openEditSheet(b){
 }
 
 /* The mail page is its own screen (#mail-<brand id>), so it can't be mixed up with editing. */
-const MAIL_TPL_KEY="sjs-mail-template-v4", OLD_TPL_KEY="sjs-mail-template-v3", CLIENT_KEY="sjs-gmail-client";
+// v5: the team's new wording (11/10); texts saved before that are not used any more
+const MAIL_TPL_KEY="sjs-mail-template-v5", RESEND_TPL_KEY="sjs-mail-resend-v1", CLIENT_KEY="sjs-gmail-client";
 const SENDER="〈새해준비상점 N.27〉 크리에이티브 파트너 히히웍스"; // the name every brand sees as the sender
 const SJS_IG=""; // 새해준비상점 인스타그램 아이디 (예: "@newyear_store") — 적어 두면 메일에 함께 들어가요
 const GMAIL_CLIENT_ID_DEFAULT=""; // (예전 방식) Google Cloud OAuth 클라이언트 ID
 /* Mail goes out through the team's Google Apps Script web app (mail/Code.gs): the Gmail account that made
    the script sends it, so nobody has to sign in here. Empty → the older Google sign-in flow below. */
 const MAIL_ENDPOINT="https://script.google.com/macros/s/AKfycbziEC4fs2-0HYqo32TKPdITrVqIkzDdzcIbY5tKLP7VOxiU6YgZFm3MrB1g2fZVfaQY/exec";
-const DEFAULT_TPL={
+const DEFAULT_TPL={ // the first mail with the cards
   subject:"〈새해준비상점 N.27〉 {브랜드} 입점 브랜드 소개 카드뉴스를 보내드려요",
   body:`안녕하세요, {브랜드} 담당자님.
 ${SENDER}입니다.
 
-보내 주신 이야기와 사진으로 {브랜드} 소개 카드뉴스를 만들었어요.
-완성된 이미지 4장을 첨부해 보내드려요.
+보내 주신 이야기와 사진으로 {브랜드} 소개 카드뉴스를 만들었습니다.
+완성된 이미지 4장을 공유드리오니 자유롭게 활용해주시면 됩니다.
 
 1장 · 메인
 2장 · 브랜드 소개
 3장 · 새해를 준비하는 당신께
 4장 · 새해준비상점 행사 안내
 
-카드뉴스는 {브랜드} 인스타그램 계정에 1장부터 순서대로 올려 주세요.
-올리실 때 새해준비상점 인스타그램 계정${SJS_IG?`(${SJS_IG})`:""}을 '공동 작업자'로 초대해 주시면,
-새해준비상점 계정에도 같은 게시물이 함께 소개돼요.
+카드뉴스는 {브랜드} 인스타그램 계정에 1장부터 순서대로 올려 주시면 됩니다.
+원하시는 다른 사진도 함께 올려주셔도 좋습니다 !
+올리실 때 새해준비상점 인스타그램 계정을 '공동 작업자'로 초대하시면
+새해준비상점 계정에도 같은 게시물이 함께 소개됩니다.
 (게시물 올리기 → 사람 태그하기 → 공동 작업자 초대)
 
-고칠 부분이 있거나 궁금한 점이 있으면 이 메일로 편하게 답장 주세요.
-고맙습니다.
+궁금한 점이 있으시면 이 메일로 편하게 회신 주세요.
+감사합니다 !
+
+${SENDER} 드림`};
+const RESEND_TPL={ // sending again (the revised cards) to a brand that already got them
+  subject:"〈새해준비상점 N.27〉 {브랜드} 입점 브랜드 소개 카드뉴스 수정본을 보내드려요",
+  body:`안녕하세요, {브랜드} 담당자님.
+${SENDER}입니다.
+
+전달주신 사항 수정반영하여 재전달 드립니다.
+감사합니다 :)
 
 ${SENDER} 드림`};
 const store={ get(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(_){} } };
-function mailTemplate(){ try{ return Object.assign({},DEFAULT_TPL,JSON.parse(store.get(MAIL_TPL_KEY)||oldTemplate()||"{}")); }catch(_){ return DEFAULT_TPL; } }
-function oldTemplate(){ // a template edited back when there were 3 cards: same text, now saying 4 cards
-  const raw=store.get(OLD_TPL_KEY); if(!raw) return null;
-  try{ const t=JSON.parse(raw); if(typeof t.body==="string") t.body=t.body.replace("이미지 3장","이미지 4장").replace(/(3장 · 새해를 준비하는 당신께)(?!\n4장)/,"$1\n4장 · 새해준비상점 행사 안내"); return JSON.stringify(t); }catch(_){ return null; }
+const TPL={first:{key:MAIL_TPL_KEY,base:DEFAULT_TPL,name:"처음 발송"},resend:{key:RESEND_TPL_KEY,base:RESEND_TPL,name:"재발송(수정안)"}};
+const tplKind=b=>b.mail&&b.mail.sentAt?"resend":"first"; // a brand that was mailed before gets the resend text
+function mailTemplate(kind="first"){ const k=TPL[kind]||TPL.first; try{ return Object.assign({},k.base,JSON.parse(store.get(k.key)||"{}")); }catch(_){ return k.base; } }
+function setMailText(b,kind){
+  const t=mailTemplate(kind); mail.kind=kind;
+  $("#m-subject").value=fillTpl(t.subject,b); $("#m-body").value=fillTpl(t.body,b);
+  $("#mailKind").textContent=kind==="resend"?"이미 메일을 보낸 브랜드라 재발송(수정안) 문구가 들어갔어요.":"처음 보내는 메일 문구예요.";
+  $("#m-switchTpl").textContent=kind==="resend"?"처음 발송 문구로 바꾸기":"재발송 문구로 바꾸기";
 }
 const fillTpl=(t,b)=>t.replace(/\{브랜드\}/g,(b.name||"").trim()||"브랜드");
-const mail={id:null, files:[], token:0};
+const mail={id:null, files:[], token:0, kind:"first"};
 function inMail(){ return /^#mail-/.test(location.hash); }
 function route(){
   const m=location.hash.match(/^#mail-(.+)$/);
@@ -2193,10 +2210,8 @@ function openMail(){
   const ms=mailState(b); const bd=$("#mailBadge");
   bd.className="badge "+(ms.cls==="sent"?"green":"orange"); bd.textContent=ms.cls==="sent"?`발송 완료 · ${fmtDate(b.mail.sentAt)}`:b.confirmedAt?`최종 컨펌 ${fmtDate(b.confirmedAt)}`:"컨펌 전";
   if(fresh){
-    const t=mailTemplate();
     $("#m-to").value=(b.email||"").trim();
-    $("#m-subject").value=fillTpl(t.subject,b);
-    $("#m-body").value=fillTpl(t.body,b);
+    setMailText(b,tplKind(b));
     $("#mailResult").textContent=""; $("#mailResult").className="msg";
     makeMailImages(b);
   }
@@ -2225,11 +2240,12 @@ function checkTo(){
   return !!v && !bad;
 }
 $("#m-to").addEventListener("input",()=>{ checkTo(); const b=cur(); if(b){ b.email=$("#m-to").value.trim(); persist(); } });
-$("#m-reset").addEventListener("click",()=>{ const t=mailTemplate(), b=cur(); $("#m-subject").value=fillTpl(t.subject,b); $("#m-body").value=fillTpl(t.body,b); });
+$("#m-reset").addEventListener("click",()=>setMailText(cur(),mail.kind));
+$("#m-switchTpl").addEventListener("click",()=>setMailText(cur(),mail.kind==="resend"?"first":"resend"));
 $("#m-saveTpl").addEventListener("click",()=>{
   const name=(cur().name||"").trim(); const back=v=>name?v.split(name).join("{브랜드}"):v;
-  store.set(MAIL_TPL_KEY,JSON.stringify({subject:back($("#m-subject").value),body:back($("#m-body").value)}));
-  toast("이 문구를 기본으로 저장했어요. 이 브라우저에서 다른 브랜드에도 쓰여요.");
+  store.set(TPL[mail.kind].key,JSON.stringify({subject:back($("#m-subject").value),body:back($("#m-body").value)}));
+  toast(`이 문구를 ${TPL[mail.kind].name} 기본 문구로 저장했어요. 이 브라우저에서 다른 브랜드에도 쓰여요.`);
 });
 $("#m-clientSave").addEventListener("click",()=>{
   store.set(CLIENT_KEY,$("#m-client").value.trim()); tokenClient=null; gToken=null;
@@ -2425,7 +2441,7 @@ function toast(t){ let n=$(".toast"); if(!n){ n=el("div","toast",document.body);
    GitHub Pages lets browsers keep a page for up to 10 minutes. On opening, the page asks for version.json
    past every cache and, when a newer build is up, reloads itself once at "?v=<build>" (a URL no cache has).
    While someone is working it only offers the reload, after saving what is pending. */
-const BUILD="20261110-182440", BUILD_KIND="maker";
+const BUILD="20261110-183509", BUILD_KIND="maker";
 async function latestBuild(){
   if(!/github\.io$/.test(location.hostname)) return null;
   try{ const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"}); if(!r.ok) return null; return (await r.json())[BUILD_KIND]||null; }catch(_){ return null; }
