@@ -203,6 +203,24 @@ details.sec>.stack{margin:4px 0 12px}
 .linkrow{display:flex;gap:8px}.linkrow input{flex:1;min-width:0;font-size:14px}
 .sheet textarea{min-height:220px;font-size:14px;line-height:1.6}
 .sheet .lbl2{font-size:13px;font-weight:600;color:var(--t3);margin:0 0 -8px}
+/* 사진 자르기 */
+.sheet.crop{width:min(100%,720px)}
+.cropModes{display:flex;gap:6px;flex-wrap:wrap}
+.cropModes .btn[aria-pressed="true"]{background:var(--primary-weak);color:var(--primary-weak-t)}
+.cropStage{position:relative;align-self:center;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:8px;background:var(--fill);max-width:100%}
+.cropStage img{display:block;max-width:none;pointer-events:none;-webkit-user-drag:none}
+.cropBox{position:absolute;box-shadow:0 0 0 9999px rgba(0,0,0,.55);outline:2px solid #fff;cursor:move;touch-action:none}
+.cropBox::before,.cropBox::after{content:"";position:absolute;inset:0;pointer-events:none;border:solid rgba(255,255,255,.5);border-width:0 1px}
+.cropBox::before{left:33.33%;right:33.33%}
+.cropBox::after{top:33.33%;bottom:33.33%;border-width:1px 0}
+/* corner handles sit just inside the box, so they can be grabbed even at the photo's edge */
+.cropBox i{position:absolute;width:34px;height:34px;touch-action:none;z-index:1}
+.cropBox i::after{content:"";position:absolute;width:20px;height:20px;border:4px solid #fff}
+.cropBox i[data-h="nw"]{left:0;top:0;cursor:nwse-resize} .cropBox i[data-h="nw"]::after{left:0;top:0;border-right:0;border-bottom:0}
+.cropBox i[data-h="ne"]{right:0;top:0;cursor:nesw-resize} .cropBox i[data-h="ne"]::after{right:0;top:0;border-left:0;border-bottom:0}
+.cropBox i[data-h="sw"]{left:0;bottom:0;cursor:nesw-resize} .cropBox i[data-h="sw"]::after{left:0;bottom:0;border-right:0;border-top:0}
+.cropBox i[data-h="se"]{right:0;bottom:0;cursor:nwse-resize} .cropBox i[data-h="se"]::after{right:0;bottom:0;border-left:0;border-top:0}
+.cropBtns{display:flex;gap:8px}.cropBtns .btn{flex:1}
 .sheetImgs{display:grid;gap:8px}
 .sheetImgs figure{margin:0;position:relative;min-width:0}
 .sheetImgs img{display:block;width:100%;max-width:100%;aspect-ratio:1080/1350;object-fit:cover;border-radius:10px;background:var(--fill)}
@@ -258,9 +276,12 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
 .cn-ic>div{position:absolute}
 .cn-ic img{position:absolute;inset:0;width:100%;height:100%;display:block;max-width:none}
 .cn-art{position:absolute;display:block;max-width:none;pointer-events:none}
-.cn-photo{position:absolute;overflow:hidden;background:#ece0d2;cursor:grab;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none}
+.cn-photo{position:absolute;overflow:hidden;background:#fff3e5;cursor:grab;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none} /* same beige as the card: a smaller photo leaves no darker box */
 .cn-photo.drag{cursor:grabbing}
-.cn-photo img.ph{position:absolute;left:50%;top:50%;max-width:none;pointer-events:none;transform-origin:50% 50%}
+/* .phc is the cropped part of the photo (moved, sized and turned as one); the full image sits inside it */
+.cn-photo .phc{position:absolute;left:50%;top:50%;overflow:hidden;pointer-events:none;transform-origin:50% 50%}
+.cn-photo .phc[hidden]{display:none}
+.cn-photo img.ph{position:absolute;left:0;top:0;max-width:none;pointer-events:none}
 .cn-photo .empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#8a7d72;font-size:40px;font-weight:700;text-align:center;border:6px dashed #c9b8a6;cursor:pointer}
 .cn-photo .empty small{font-size:28px;font-weight:500}
 .cn-photo.dropping{outline:12px solid #fd7242;outline-offset:-12px}
@@ -349,7 +370,7 @@ textarea.mirror:focus{background:#fef2e4;border-color:#fd7242}
       <div class="field">
         <span class="lbl"><span><span class="stepn">2</span>사진 3장</span></span>
         <div class="thumbs" id="thumbs"></div>
-        <p class="hint">미리보기에서 사진을 끌어 옮기고, 휠이나 두 손가락(벌리기·돌리기)으로 크기와 각도를 바꿀 수 있어요.</p>
+        <p class="hint">미리보기에서 사진을 끌어 옮기고, 휠이나 두 손가락(벌리기·돌리기)으로 크기와 각도를 바꿀 수 있어요. 사진을 한 번 누르면 자를 수 있어요.</p>
       </div>
 
       <div class="field" data-f="hook">
@@ -788,10 +809,11 @@ function block(parent,[x,y,w,h,color,deco]){ // pages 2/3 tiles and artwork
 function photoFrame(parent, f, slot){
   const fr=el("div","cn-photo",parent,{left:f.left+"px",top:f.top+"px",width:f.w+"px",height:f.h+"px"});
   fr.dataset.slot=slot;
-  const img=el("img","ph",fr); img.alt=""; img.hidden=true;
+  const wrap=el("div","phc",fr); wrap.hidden=true;
+  const img=el("img","ph",wrap); img.alt=""; img.hidden=true;
   const empty=el("div","empty no-export",fr);
   empty.innerHTML=`<span>${SLOT_NAMES[slot]}</span><small>눌러서 올리거나 사진을 끌어다 놓으세요</small>`;
-  return {fr,img,empty,f};
+  return {fr,wrap,img,empty,f};
 }
 
 function buildPages(){
@@ -837,15 +859,17 @@ function buildPages(){
   return r;
 }
 
+// the part of the photo that is used, as fractions of the original image (whole image when not cropped)
+const cropOf=ph=>{ const c=ph.crop; return c&&c.w>0&&c.h>0?c:{x:0,y:0,w:1,h:1}; };
 function applyPhoto(ref, ph){
-  const {img,empty,f}=ref;
-  if(!ph.src){ img.hidden=true; img.removeAttribute("src"); empty.hidden=false; return; }
-  empty.hidden=true; img.hidden=false;
+  const {wrap,img,empty,f}=ref;
+  if(!ph.src){ wrap.hidden=true; img.hidden=true; img.removeAttribute("src"); empty.hidden=false; return; }
+  empty.hidden=true; wrap.hidden=false; img.hidden=false;
   if(img.getAttribute("src")!==ph.src) img.src=ph.src;
-  const cover=Math.max(f.w/ph.w, f.h/ph.h);
-  img.style.width=(ph.w*cover*ph.scale)+"px";
-  img.style.height=(ph.h*cover*ph.scale)+"px";
-  img.style.transform=`translate(-50%,-50%) translate(${ph.x}px,${ph.y}px) rotate(${ph.rot}deg)`;
+  // the cropped part fills the frame at 100% (like 'cover'), then the photo's own size, position and angle apply
+  const c=cropOf(ph), cw=ph.w*c.w, ch=ph.h*c.h, k=Math.max(f.w/cw, f.h/ch)*ph.scale;
+  Object.assign(wrap.style,{width:cw*k+"px",height:ch*k+"px",transform:`translate(-50%,-50%) translate(${ph.x}px,${ph.y}px) rotate(${ph.rot}deg)`});
+  Object.assign(img.style,{width:ph.w*k+"px",height:ph.h*k+"px",left:-c.x*ph.w*k+"px",top:-c.y*ph.h*k+"px"});
 }
 // "내년을 담아가는 작은 상점 / 새로운 시작이 모인 공간" → two phrases with the clover between them
 const hookParts=h=>{ const p=(h||"").split(/\s*\/\s*/).map(x=>x.trim()).filter(Boolean); return p.length===2?p:null; };
@@ -1362,13 +1386,14 @@ function initEditor(){
       <div><div class="ti"><span>${nm}</span><button class="btn sm up" type="button">파일 선택</button></div>
       <div class="range"><label for="sc-${i}">크기</label><input type="range" id="sc-${i}" min="50" max="300" step="1"><output></output></div>
       <div class="range"><label for="rt-${i}">회전</label><input type="range" id="rt-${i}" min="-180" max="180" step="1"><output></output></div>
-      <div class="acts"><button class="btn sm r90" type="button">90° 돌리기</button><button class="btn sm reset" type="button">위치·크기 초기화</button><button class="btn sm rm" type="button">사진 빼기</button></div></div>`;
+      <div class="acts"><button class="btn sm crop" type="button">자르기</button><button class="btn sm r90" type="button">90° 돌리기</button><button class="btn sm reset" type="button">위치·크기 초기화</button><button class="btn sm rm" type="button">사진 빼기</button></div></div>`;
     const pick=()=>{pendingSlot=i; $("#photoFile").click();};
     s.querySelector(".th").addEventListener("click",pick);
     s.querySelector(".th").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();pick();}});
     s.querySelector(".up").addEventListener("click",pick);
     s.querySelector(`#sc-${i}`).addEventListener("input",e=>{cur().photos[i].scale=e.target.value/100; changed(false);});
     s.querySelector(`#rt-${i}`).addEventListener("input",e=>{cur().photos[i].rot=+e.target.value; changed(false);});
+    s.querySelector(".crop").addEventListener("click",()=>openCrop(i));
     s.querySelector(".r90").addEventListener("click",()=>{const p=cur().photos[i]; let r=p.rot+90; if(r>180) r-=360; p.rot=r; changed();});
     s.querySelector(".reset").addEventListener("click",()=>{Object.assign(cur().photos[i],{scale:1,x:0,y:0,rot:0}); changed();});
     s.querySelector(".rm").addEventListener("click",()=>{dropPhoto(cur().photos[i]); cur().photos[i]=blankPhoto(); changed();});
@@ -1403,7 +1428,8 @@ function fillEditor(){
     const sc=s.querySelector(`#sc-${i}`), rt=s.querySelector(`#rt-${i}`);
     sc.value=Math.round(p.scale*100); sc.nextElementSibling.textContent=Math.round(p.scale*100)+"%";
     rt.value=Math.round(p.rot); rt.nextElementSibling.textContent=Math.round(p.rot)+"°";
-    s.querySelectorAll("input,.r90,.reset,.rm").forEach(x=>x.disabled=!p.src);
+    s.querySelectorAll("input,.crop,.r90,.reset,.rm").forEach(x=>x.disabled=!p.src);
+    s.querySelector(".crop").textContent=p.crop?"다시 자르기":"자르기";
   });
 }
 
@@ -1603,7 +1629,7 @@ function scaleOf(fr){ return fr.closest(".pvbox").clientWidth/1080; }
 const clampNum=(v,a,b)=>Math.max(a,Math.min(b,v));
 const normDeg=d=>{ d=((d+180)%360+360)%360-180; return Math.round(d*10)/10; };
 function wirePhoto({fr},slot){
-  const pts=new Map(); let g=null, moved=false;
+  const pts=new Map(); let g=null, moved=false, travel=0, downAt=null, multi=false;
   const f=()=>FRAMES[slot];
   // pointer position in card px, relative to the frame's centre (the photo's x/y are measured from there)
   const at=e=>{ const r=fr.getBoundingClientRect(), s=scaleOf(fr)||1;
@@ -1620,12 +1646,13 @@ function wirePhoto({fr},slot){
     if(!cur().photos[slot].src || (e.pointerType==="mouse" && e.button!==0)) return;
     e.preventDefault();
     try{ fr.setPointerCapture(e.pointerId); }catch(_){}
-    pts.set(e.pointerId,at(e)); if(pts.size===1) moved=false;
+    pts.set(e.pointerId,at(e)); if(pts.size===1){ moved=false; travel=0; multi=false; downAt={x:e.clientX,y:e.clientY}; } else multi=true;
     fr.classList.add("drag"); start();
   });
   fr.addEventListener("pointermove",e=>{
     if(!g || !pts.has(e.pointerId)) return;
     pts.set(e.pointerId,at(e));
+    if(downAt) travel=Math.max(travel,Math.hypot(e.clientX-downAt.x,e.clientY-downAt.y));
     const ph=cur().photos[slot], F=f();
     if(!g.two){ const p=pts.get(e.pointerId); ph.x=g.x+(p.x-g.p.x); ph.y=g.y+(p.y-g.p.y); }
     else {
@@ -1653,7 +1680,10 @@ function wirePhoto({fr},slot){
   };
   fr.addEventListener("pointerup",end); fr.addEventListener("pointercancel",end); fr.addEventListener("lostpointercapture",end);
   // a tap on an empty frame opens the photo picker (on click, so a scroll that starts there doesn't)
-  fr.addEventListener("click",()=>{ if(!cur().photos[slot].src){ pendingSlot=slot; $("#photoFile").click(); } });
+  fr.addEventListener("click",()=>{
+    if(!cur().photos[slot].src){ pendingSlot=slot; $("#photoFile").click(); return; }
+    if(travel<6 && !multi) openCrop(slot); // a plain click on the photo: crop it (a drag moves it instead)
+  });
   // Safari's own pinch gesture would zoom the page instead
   ["gesturestart","gesturechange"].forEach(t=>fr.addEventListener(t,e=>e.preventDefault()));
   fr.addEventListener("wheel",e=>{
@@ -1664,6 +1694,87 @@ function wirePhoto({fr},slot){
   fr.addEventListener("dragover",e=>{e.preventDefault(); fr.classList.add("dropping");});
   fr.addEventListener("dragleave",()=>fr.classList.remove("dropping"));
   fr.addEventListener("drop",e=>{e.preventDefault(); fr.classList.remove("dropping"); const f=e.dataTransfer.files[0]; if(f) loadPhoto(f,slot);});
+}
+
+/* ---------- 사진 자르기 ----------
+   The box is kept in fractions of the original photo. '칸 비율' keeps the box the shape of the card's photo frame,
+   so the cropped part fills the frame exactly; '자유롭게' lets any shape through (the frame then shows it like 'cover'). */
+function openCrop(slot){
+  const b=cur(), ph=b.photos[slot]; if(!ph||!ph.src||!ph.w||!ph.h) return;
+  $("#cropSheet")?.remove();
+  const F=FRAMES[slot], turned=Math.abs(Math.round(ph.rot/90))%2===1;
+  const ratio=(turned?F.h/F.w:F.w/F.h)*ph.h/ph.w; // the frame's shape, as box width/height in image fractions
+  const clamp01=c=>{ c.w=Math.min(1,Math.max(.04,c.w)); c.h=Math.min(1,Math.max(.04,c.h)); c.x=Math.min(1-c.w,Math.max(0,c.x)); c.y=Math.min(1-c.h,Math.max(0,c.y)); return c; };
+  const fitRatio=c=>{ // largest box of the frame's shape inside c, same centre
+    const cx=c.x+c.w/2, cy=c.y+c.h/2; let w=c.w, h=w/ratio; if(h>c.h){ h=c.h; w=h*ratio; }
+    if(w>1){ w=1; h=w/ratio; } if(h>1){ h=1; w=h*ratio; }
+    return clamp01({x:cx-w/2,y:cy-h/2,w,h}); };
+  // start from the saved crop, or from what the frame shows now
+  let box, mode;
+  if(ph.crop){ box={...ph.crop}; mode=Math.abs(box.w/box.h/ratio-1)<.02?"frame":"free"; }
+  else {
+    const c0=cropOf(ph), k=Math.max(F.w/(ph.w*c0.w),F.h/(ph.h*c0.h))*ph.scale;
+    const w=(turned?F.h:F.w)/k/ph.w, h=(turned?F.w:F.h)/k/ph.h;
+    box=w<=1.001&&h<=1.001?clamp01({x:.5-ph.x/k/ph.w-w/2,y:.5-ph.y/k/ph.h-h/2,w,h}):fitRatio({x:0,y:0,w:1,h:1});
+    mode="frame";
+  }
+  const back=el("div","sheetBack mid",document.body); back.id="cropSheet";
+  const sh=el("div","sheet crop",back); sh.setAttribute("role","dialog"); sh.setAttribute("aria-modal","true"); sh.setAttribute("aria-labelledby","cropTitle");
+  const h=el("h3","",sh); h.id="cropTitle"; h.textContent=`사진 자르기 · ${SLOT_NAMES[slot]}`;
+  const modes=el("div","cropModes",sh);
+  const mFrame=el("button","btn sm",modes); mFrame.type="button"; mFrame.textContent="칸 비율에 맞추기";
+  const mFree=el("button","btn sm",modes); mFree.type="button"; mFree.textContent="자유롭게";
+  const stage=el("div","cropStage",sh); const im=el("img","",stage); im.alt=""; im.src=ph.src;
+  const bx=el("div","cropBox",stage); ["nw","ne","sw","se"].forEach(k=>{ const i=el("i","",bx); i.dataset.h=k; });
+  el("p","hint",sh).textContent="네모를 끌어서 옮기고, 모서리를 끌어서 크기를 바꿔요. 네모 안쪽이 카드에 들어가요.";
+  const row=el("div","cropBtns",sh);
+  const reset=el("button","btn",row); reset.type="button"; reset.textContent="원래대로";
+  const cancel=el("button","btn",row); cancel.type="button"; cancel.textContent="취소";
+  const ok=el("button","btn primary",row); ok.type="button"; ok.textContent="자르기";
+  let W=0,H=0;
+  const draw=()=>{ Object.assign(bx.style,{left:box.x*W+"px",top:box.y*H+"px",width:box.w*W+"px",height:box.h*H+"px"});
+    mFrame.setAttribute("aria-pressed",mode==="frame"); mFree.setAttribute("aria-pressed",mode==="free"); };
+  const size=()=>{ // the photo as large as the window allows
+    const maxW=Math.min(sh.clientWidth-32,680), maxH=Math.max(220,window.innerHeight*.56);
+    const s=Math.min(maxW/ph.w,maxH/ph.h); W=Math.round(ph.w*s); H=Math.round(ph.h*s);
+    Object.assign(im.style,{width:W+"px",height:H+"px"}); Object.assign(stage.style,{width:W+"px",height:H+"px"}); draw(); };
+  mFrame.addEventListener("click",()=>{ mode="frame"; box=fitRatio(box); draw(); });
+  mFree.addEventListener("click",()=>{ mode="free"; draw(); });
+  // dragging: inside the box moves it, a corner resizes it (the opposite corner stays put)
+  let drag=null;
+  stage.addEventListener("pointerdown",e=>{
+    const hd=e.target.closest("i[data-h]"); if(!hd && !e.target.closest(".cropBox")) return;
+    e.preventDefault(); try{ stage.setPointerCapture(e.pointerId); }catch(_){}
+    drag={id:e.pointerId,h:hd?hd.dataset.h:null,sx:e.clientX,sy:e.clientY,b:{...box}};
+  });
+  stage.addEventListener("pointermove",e=>{
+    if(!drag||e.pointerId!==drag.id) return;
+    const dx=(e.clientX-drag.sx)/W, dy=(e.clientY-drag.sy)/H, o=drag.b;
+    if(!drag.h){ box=clamp01({x:o.x+dx,y:o.y+dy,w:o.w,h:o.h}); draw(); return; }
+    const L=drag.h.includes("w"), T=drag.h.includes("n");
+    const ax=L?o.x+o.w:o.x, ay=T?o.y+o.h:o.y;            // the corner that stays
+    let px=Math.min(1,Math.max(0,(L?o.x:o.x+o.w)+dx)), py=Math.min(1,Math.max(0,(T?o.y:o.y+o.h)+dy));
+    let w=Math.max(.04,Math.abs(px-ax)), hh=Math.max(.04,Math.abs(py-ay));
+    if(mode==="frame"){ if(w/hh>ratio) hh=w/ratio; else w=hh*ratio;
+      const mw=L?ax:1-ax, mh=T?ay:1-ay; if(w>mw){ w=mw; hh=w/ratio; } if(hh>mh){ hh=mh; w=hh*ratio; } }
+    else { w=Math.min(w,L?ax:1-ax); hh=Math.min(hh,T?ay:1-ay); }
+    box={x:L?ax-w:ax,y:T?ay-hh:ay,w,h:hh}; draw();
+  });
+  const endDrag=e=>{ if(drag&&e.pointerId===drag.id) drag=null; };
+  stage.addEventListener("pointerup",endDrag); stage.addEventListener("pointercancel",endDrag);
+  const close=()=>{ back.remove(); window.removeEventListener("resize",size); };
+  reset.addEventListener("click",()=>{ box={x:0,y:0,w:1,h:1}; mode="free"; draw(); });
+  cancel.addEventListener("click",close);
+  back.addEventListener("click",e=>{ if(e.target===back) close(); });
+  back.addEventListener("keydown",e=>{ if(e.key==="Escape") close(); });
+  ok.addEventListener("click",()=>{
+    const r=v=>Math.round(v*10000)/10000, full=box.w>.999&&box.h>.999;
+    if(full) delete ph.crop; else ph.crop={x:r(box.x),y:r(box.y),w:r(box.w),h:r(box.h)};
+    Object.assign(ph,{x:0,y:0,scale:1}); // the crop now decides the framing
+    close(); changed(); toast(full?"사진을 원래대로 돌렸어요.":"사진을 잘랐어요.");
+  });
+  window.addEventListener("resize",size);
+  requestAnimationFrame(size); ok.focus();
 }
 
 /* ---------- export ---------- */
@@ -1747,7 +1858,7 @@ const album={sig:"",jpegs:null,names:null,timer:null,promise:null};
 let dlNs=null; // the Claude app's save capability, once known
 function albumSig(b,num){
   return JSON.stringify([num,b.name,b.sectLabel,b.section,b.hook,b.p2l1,b.p2l2,b.p2body,b.p3body,b.sizes,
-    b.photos.map(p=>[p.src?p.src.length:0,p.src?p.src.slice(-48):"",p.x,p.y,p.scale,p.rot])]);
+    b.photos.map(p=>[p.src?p.src.length:0,p.src?p.src.slice(-48):"",p.x,p.y,p.scale,p.rot,p.crop?[p.crop.x,p.crop.y,p.crop.w,p.crop.h]:0])]);
 }
 function scheduleAlbum(){ if(!MOBILE) return; clearTimeout(album.timer); album.timer=setTimeout(prepAlbum,1500); }
 function prepAlbum(){
@@ -2314,7 +2425,7 @@ function toast(t){ let n=$(".toast"); if(!n){ n=el("div","toast",document.body);
    GitHub Pages lets browsers keep a page for up to 10 minutes. On opening, the page asks for version.json
    past every cache and, when a newer build is up, reloads itself once at "?v=<build>" (a URL no cache has).
    While someone is working it only offers the reload, after saving what is pending. */
-const BUILD="20261109-223031", BUILD_KIND="maker";
+const BUILD="20261110-182440", BUILD_KIND="maker";
 async function latestBuild(){
   if(!/github\.io$/.test(location.hostname)) return null;
   try{ const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"}); if(!r.ok) return null; return (await r.json())[BUILD_KIND]||null; }catch(_){ return null; }
