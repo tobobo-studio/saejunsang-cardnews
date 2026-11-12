@@ -244,6 +244,8 @@ const SB_KEY="sb_publishable_dBC439I0iaObf88_Kk2kNA_CQsgjKpC";
 const DRAFT_KEY="sjs-brand-q-draft", SENT_KEY="sjs-brand-q-sent";
 /* …/#edit: the shared link for changing a questionnaire that was already sent */
 const EDIT=/^#edit\b/.test(location.hash)||new URLSearchParams(location.search).has("edit");
+/* 신청 마감 (11월 11일): new questionnaires are closed; brands that already sent one can still change it at …/#edit */
+const CLOSED=true;
 let editRow=null; // {id,data} of the brand being edited
 const $=s=>document.querySelector(s);
 const len=s=>[...(s||"")].length;
@@ -414,6 +416,7 @@ $("#qform").addEventListener("submit",async e=>{
   btn.disabled=true; btn.textContent="보내는 중…";
   try{
     if(EDIT){ await sendEdit(prog); return; }
+    if(CLOSED){ showClosed(); return; } // no new questionnaires after the deadline
     // one questionnaire per brand: an email that has already sent one can't send again
     const email=$("#q-email").value.replace(/\s+/g,"").toLowerCase();
     let dup=false;
@@ -541,7 +544,7 @@ function showDone(already, name){
 
 /* always the newest version: browsers may keep this page for up to 10 minutes, so on opening it checks
    version.json past every cache and, if a newer build is up, reloads once at "?v=<build>" (drafts are kept) */
-const BUILD="20261110-183509";
+const BUILD="20261112-153159";
 (async()=>{
   if(!/github\.io$/.test(location.hostname)) return;
   try{
@@ -558,9 +561,17 @@ if(document.fonts&&document.fonts.ready) document.fonts.ready.then(layoutMirrors
 if(document.fonts&&document.fonts.addEventListener) document.fonts.addEventListener("loadingdone",()=>Object.keys(STORY).forEach(count));
 /* A device that already sent shows the thank-you screen. If the team has since cleared that answer
    (it is no longer in the list), the device forgets it and the questionnaire opens again. */
+function showClosed(){
+  document.title="새해준비상점 입점 브랜드 질문지 (신청 종료)";
+  $("#doneTitle").textContent="새해 준비상점 카드뉴스 신청이 종료되었습니다";
+  $("#doneText").textContent=""; $("#doneText").hidden=true;
+  $("#qform").hidden=true; $("#sentBefore").hidden=true; $("#findForm").hidden=true; $("#done").hidden=false;
+  document.querySelectorAll(".lead,.facts").forEach(x=>x.hidden=true);
+}
 if(EDIT) enterEdit();
+else if(CLOSED) showClosed();
 (async()=>{
-  if(EDIT) return;
+  if(EDIT||CLOSED) return;
   let s=null; try{ s=JSON.parse(localStorage.getItem(SENT_KEY)||"null"); }catch(_){}
   if(!s||!s.name) return;
   showDone(true,s.name);
